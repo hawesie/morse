@@ -42,5 +42,20 @@ class DepthCameraPublisher(ROSPublisherTF):
         # memoryview from PyMemoryView_FromMemory() implements the buffer interface
         pc2.data = bytes(self.data['points'])
 
-        self.publish_with_robot_transform(pc2)
+        # Test whether TF frame should be published. Default is True.
+        self.tf = True
+        if 'tf' in self.kwargs:
+            if self.kwargs['tf'].lower() == 'false':
+                self.tf = False
+            
+        if self.tf == True:
+            self.publish_with_robot_transform(pc2)
+        else:
+            self.publish(pc2)
+                        
+
+            
+
+            
+            
 
