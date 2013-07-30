@@ -29,6 +29,8 @@ class Battery(morse.core.sensor.Sensor):
 
     add_data('charge', 100.0, "float", "Initial battery level, in percent")
 
+    add_data('charging', False, "boolean", "Flag whether the battery is currently charging")
+
     def __init__(self, obj, parent=None):
         """ Constructor method.
             Receives the reference to the Blender object.
@@ -45,13 +47,16 @@ class Battery(morse.core.sensor.Sensor):
         """ Main function of this component. """
         newtime = time.time()
         charge = self.local_data['charge']
+        charging = self.local_data['charging']
         dt = newtime - self._time
 
-        if self.isInChargingZone() and charge < 100:
+        if self.isInChargingZone():# and charge < 100:
+            charging = True
             charge = charge + dt * self._discharging_rate
             if charge > 100.0:
                 charge = 100.0
         elif charge > 0:
+            charging = False
             charge = charge - dt * self._discharging_rate
             if charge < 0.0:
                 charge = 0.0
@@ -59,6 +64,7 @@ class Battery(morse.core.sensor.Sensor):
         # Store the data acquired by this sensor that could be sent
         #  via a middleware.
         self.local_data['charge'] = float(charge)
+        self.local_data['charging'] = charging
         # update the current time
         self._time = newtime
 

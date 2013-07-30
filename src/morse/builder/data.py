@@ -109,7 +109,7 @@ MORSE_DATASTREAM_DICT = {
         },
     "morse.sensors.battery.Battery": {
         "default": {
-            "ros": 'morse.middleware.ros.battery.Float32Publisher',
+            "ros": 'morse.middleware.ros.battery.BatteryStatePublisher',
             "socket": INTERFACE_DEFAULT_OUT,
             "yarp": INTERFACE_DEFAULT_OUT,
             "text": INTERFACE_DEFAULT_OUT,
