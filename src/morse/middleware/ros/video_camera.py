@@ -20,6 +20,7 @@ class CameraPublisher(ROSPublisherTF):
             ROSPublisherTF.initialize(self)
         else:
             ROSPublisher.initialize(self)
+
         # Generate a publisher for the CameraInfo
         self.topic_camera_info = rospy.Publisher(self.topic_name+'/camera_info', CameraInfo)
 
