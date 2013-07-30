@@ -30,6 +30,8 @@ class Battery(morse.core.sensor.Sensor):
     add_data('charge', 100.0, "float", "Initial battery level, in percent")
     add_data('status', "Charged", "string", "Charging Status")
 
+    add_data('charging', False, "boolean", "Flag whether the battery is currently charging")
+
     def __init__(self, obj, parent=None):
         """ Constructor method.
             Receives the reference to the Blender object.
