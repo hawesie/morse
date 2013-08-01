@@ -1,19 +1,13 @@
-import roslib; roslib.load_manifest('scitos_msgs')
-from scitos_msgs.msg import BatteryState
+import roslib; roslib.load_manifest('std_msgs')
+from std_msgs.msg import Float32
 from morse.middleware.ros import ROSPublisher
 
-class BatteryStatePublisher(ROSPublisher):
+class Float32Publisher(ROSPublisher):
     """ Publish the charge of the battery sensor. """
-    ros_class = BatteryState
+    ros_class = Float32
 
     def default(self, ci='unused'):
-        msg = BatteryState()
-
-        msg.header = self.get_ros_header()
-
-        msg.lifePercent = int(self.data['charge'])
-        # battery life time is unknown, therefore -1
-        msg.lifeTime    = -1
-        msg.charging    = self.data['charging']
+        msg = Float32()
+        msg.data = self.data['charge']
 
         self.publish(msg)

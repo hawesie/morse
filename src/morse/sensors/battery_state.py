@@ -2,8 +2,9 @@ import logging; logger = logging.getLogger("morse." + __name__)
 import morse.core.sensor
 import time
 from morse.helpers.components import add_data, add_property
+from morse.core import blenderapi
 
-class Battery(morse.core.sensor.Sensor):
+class BatteryStateSensor(morse.core.sensor.Sensor):
     """
     This sensor emulates the remaining charge of a battery on the robot.
     It is meant to be used only as an informative measure, to be taken in
@@ -19,11 +20,18 @@ class Battery(morse.core.sensor.Sensor):
     the battery will gradually recharge. However, this is not implemented yet.
     """
 
-    _name = "Battery Sensor"
+    _name = "Battery State Sensor"
 
     add_property('_discharging_rate', 0.05, 'DischargingRate', "float", "Battery discharging rate, in percent per seconds")
 
+    add_property('_range', 1.0, 'Range', "float", "The distance, in meters "
+            "beyond which this sensor is unable to locate the chargin zone.")
+
     add_data('charge', 100.0, "float", "Initial battery level, in percent")
+
+    add_data('charging', False, "boolean", "Flag whether the battery is currently charging")
+
+    add_data('power_supply', False, "boolean", "Flag whether a power supply is present")
 
     def __init__(self, obj, parent=None):
         """ Constructor method.
@@ -41,13 +49,19 @@ class Battery(morse.core.sensor.Sensor):
         """ Main function of this component. """
         newtime = time.time()
         charge = self.local_data['charge']
+        charging = self.local_data['charging']
+        power_supply = self.local_data['power_supply']
         dt = newtime - self._time
 
-        if self.isInChargingZone() and charge < 100:
+        if self.isInChargingZone():# and charge < 100:
+            charging = True
+            power_supply = True
             charge = charge + dt * self._discharging_rate
             if charge > 100.0:
                 charge = 100.0
         elif charge > 0:
+            charging = False
+            power_supply = False
             charge = charge - dt * self._discharging_rate
             if charge < 0.0:
                 charge = 0.0
@@ -55,16 +69,36 @@ class Battery(morse.core.sensor.Sensor):
         # Store the data acquired by this sensor that could be sent
         #  via a middleware.
         self.local_data['charge'] = float(charge)
+        self.local_data['charging'] = charging
+        self.local_data['power_supply'] = power_supply
         # update the current time
         self._time = newtime
 
 
-
     def isInChargingZone(self):
         # Test if the robot (parent) is in a charging zone
-        pose = self.position_3d
+        parent = self.robot_parent.bge_object
+
         # look for a charging zon in the scene
-        # TODO for 'charging_zone' in scene:
-        # if the robot is near the zone, return true
+        for obj in blenderapi.scene().objects:
+            try:
+                obj["ChargingZone"]
+                # Skip distance to self
+                if parent != obj:
+                    distance = self._measure_distance_to_object (parent, obj)
+                    # if the robot is near the zone, return true
+                    if distance <= self._range:
+                        return True
+            except KeyError:
+                pass
         return False
+
+    def _measure_distance_to_object(self, own_robot, target_object):
+        """ Compute the distance between two objects
+
+        Parameters are two blender objects
+        """
+        distance, globalVector, localVector = own_robot.getVectTo(target_object)
+        logger.debug("Distance from robot {0} to object {1} = {2}".format(own_robot, target_object, distance))
+        return distance
 
