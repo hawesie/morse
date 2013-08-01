@@ -115,6 +115,14 @@ MORSE_DATASTREAM_DICT = {
             "text": INTERFACE_DEFAULT_OUT,
             }
         },
+    "morse.sensors.battery_state.BatteryStateSensor": {
+        "default": {
+            "ros": 'morse.middleware.ros.battery_state.BatteryStatePublisher',
+            "socket": INTERFACE_DEFAULT_OUT,
+            "yarp": INTERFACE_DEFAULT_OUT,
+            "text": INTERFACE_DEFAULT_OUT,
+            }
+        },
     "clock": {
         "default": {
             "ros": 'morse.middleware.ros.clock.ClockPublisher',

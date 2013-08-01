@@ -12,7 +12,8 @@ class VideoCameraPublisher(ROSPublisher):
     ros_class = Image
 
     def initialize(self):
-        self.kwargs['topic_suffix'] = '/image'
+        if 'topic_suffix' not in self.kwargs:
+            self.kwargs['topic_suffix'] = '/image'
         ROSPublisher.initialize(self)
         # Generate a publisher for the CameraInfo
         self.topic_camera_info = rospy.Publisher(self.topic_name+'/camera_info', CameraInfo)
