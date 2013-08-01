@@ -33,6 +33,15 @@ class Battery(SensorCreator):
         self.append(mesh)
         self.properties(DischargingRate = 0.05)
 
+class BatteryStateSensor(SensorCreator):
+    def __init__(self, name=None):
+        SensorCreator.__init__(self, name, "morse.sensors.battery_state.BatteryStateSensor", "battery")
+        mesh = Cylinder("BatteryCylinder")
+        mesh.scale = (.01, .01, .04)
+        mesh.color(.2, .2, .2)
+        self.append(mesh)
+        self.properties(DischargingRate = 0.05)        
+
 class CompoundSensor(SensorCreator):
     _classpath = "morse.sensors.compound.CompoundSensor"
 
