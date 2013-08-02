@@ -18,7 +18,7 @@ class VideoCamera(morse.sensors.camera.Camera):
 
     Camera calibration matrix
     -------------------------
-sc
+
     The camera configuration parameters implicitly define a geometric camera in
     blender units. Knowing that the **cam_focal** attribute is a value that
     represents the distance in Blender unit at which the largest image dimension is
