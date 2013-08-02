@@ -42,8 +42,8 @@ class CameraPublisher(ROSPublisherTF):
         image.header = self.get_ros_header()
         image.height = self.component_instance.image_height
         image.width = self.component_instance.image_width
-        image.encoding = self.encoding
-        image.step = image.width * 4
+        image.encoding = 'rgb8'
+        image.step = image.width * 3
 
         # VideoTexture.ImageRender implements the buffer interface
         image.data = bytes(image_local)

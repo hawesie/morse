@@ -2,6 +2,7 @@ import logging; logger = logging.getLogger("morse." + __name__)
 from morse.core.services import async_service
 from morse.core import status
 import morse.core.blenderapi
+from morse.core import blenderapi
 from morse.core import mathutils
 import morse.sensors.camera
 from morse.helpers.components import add_data
@@ -17,7 +18,7 @@ class VideoCamera(morse.sensors.camera.Camera):
 
     Camera calibration matrix
     -------------------------
-
+sc
     The camera configuration parameters implicitly define a geometric camera in
     blender units. Knowing that the **cam_focal** attribute is a value that
     represents the distance in Blender unit at which the largest image dimension is
@@ -112,7 +113,8 @@ class VideoCamera(morse.sensors.camera.Camera):
 
             # NOTE: Blender returns the image as a binary string
             #  encoded as RGBA
-            image_data = morse.core.blenderapi.cameras()[self.name()].source
+            #image_data = morse.core.blenderapi.cameras()[self.name()].source
+            image_data = blenderapi.texture().imageToArray(morse.core.blenderapi.cameras()[self.name()].source, 'RGB')
 
             self.robot_pose = copy.copy(self.robot_parent.position_3d)
 
