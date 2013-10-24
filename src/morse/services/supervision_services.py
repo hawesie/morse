@@ -4,6 +4,7 @@ from morse.core import status, blenderapi
 from morse.blender.main import reset_objects as main_reset, close_all as main_close, quit as main_terminate
 from morse.core.exceptions import *
 import json
+import mathutils
 
 @service(component = "simulation")
 def list_robots():
@@ -244,3 +245,120 @@ def set_object_dynamics(object_name, state):
         blender_object.suspendDynamics()
     return state
 
+@service(component="simulation")
+def get_object_pose(object_name):
+    """ Returns the pose of the object as a tuple of the object's position and
+    orientation: [[x, y, z], [qw, qx, qy, qz]]
+
+    :param string object_name: The name of the object.
+    """
+    b_obj = get_obj_by_name(object_name)
+
+    pos =  b_obj.worldPosition 
+    ori =  b_obj.worldOrientation.to_quaternion()
+
+    return json.dumps([[pos.x, pos.y, pos.z], [ori.w,ori.x,ori.y,ori.z]])
+
+@service(component="simulation")
+def set_object_pose(object_name, position, orientation):
+    """ Sets the pose of the object.
+
+    :param string object_name: The name of the object.
+    :param string position: new position of the object [x, y, z]
+    :param string position: new orientation of the object [qw, qx, qy, qz]
+    """
+    b_obj = get_obj_by_name(object_name)
+
+    pos = mathutils.Vector(json.loads(position))
+    ori = mathutils.Quaternion(json.loads(orientation)).to_matrix()
+     
+    # Suspend Physics of that object
+    b_obj.suspendDynamics()
+    b_obj.setLinearVelocity([0.0, 0.0, 0.0], True)
+    b_obj.setAngularVelocity([0.0, 0.0, 0.0], True)
+    b_obj.applyForce([0.0, 0.0, 0.0], True)
+    b_obj.applyTorque([0.0, 0.0, 0.0], True)
+    
+    logger.debug("%s goes to %s" % (b_obj, pos))
+    b_obj.worldPosition = pos
+    b_obj.worldOrientation = ori
+    # Reset physics simulation
+    b_obj.restoreDynamics()
+
+
+@service(component="simulation")
+def get_object_global_bbox(object_name):
+    """ Returns the global bounding box of an object as list encapsulated as
+    string: "[[x0, y0, z0 ], ... ,[x7, y7, z7]]".
+
+    :param string object_name: The name of the object.
+    """
+    # Test whether the object exists in the scene  
+    b_obj = get_obj_by_name(object_name)
+    
+    # Get bounding box of object
+    bb = blenderapi.objectdata(object_name).bound_box
+
+    # Group x,y,z-coordinates as lists 
+    bbox_local = [[bb_corner[i] for i in range(3)] for bb_corner in bb]
+    
+    world_pos = b_obj.worldPosition
+    world_ori = b_obj.worldOrientation.to_3x3()
+
+    bbox_global = []
+    for corner in bbox_local:
+        vec = world_ori * mathutils.Vector(corner) + \
+            mathutils.Vector(world_pos) 
+        bbox_global.append([vec.x,vec.y,vec.z])
+        
+    return json.dumps(bbox_global)
+    
+@service(component="simulation")
+def get_object_bbox(object_name):
+    """ Returns the local bounding box of an object as list encapsulated as
+    string: "[[x0, y0, z0 ], ... ,[x7, y7, z7]]".
+
+    :param string object_name: The name of the object.
+    """
+    # Test whether the object exists in the scene  
+    get_obj_by_name(object_name)
+    
+    # Get bounding box of object
+    bb = blenderapi.objectdata(object_name).bound_box
+
+    # Group x,y,z-coordinates as lists 
+    bbox_local = [[bb_corner[i] for i in range(3)] for bb_corner in bb]
+
+    return json.dumps(bbox_local)
+
+@service(component="simulation")
+def get_object_type(object_name):
+    """ Returns the type of an object as string
+
+    :param string object_name: The name of the object.
+    """
+    # Test whether the object exists in the scene  
+    b_obj = get_obj_by_name(object_name)
+    
+    obj_type = b_obj.get('Type', '')
+
+    return json.dumps(obj_type)
+
+@service(component="simulation")
+def transform_to_obj_frame(object_name, point):
+    """ Transforms a 3D point with respect to the origin into the coordinate
+    frame of an object and returns the global coordinates.
+
+    :param string object_name: The name of the object.
+    :param string point: coordinates as a list "[x, y, z]"
+    """
+    # Test whether the object exists in the scene  
+    b_obj = get_obj_by_name(object_name)
+    
+    world_pos = b_obj.worldPosition
+    world_ori = b_obj.worldOrientation.to_3x3()
+
+    pos =  world_ori * mathutils.Vector(json.loads(point)) + \
+        mathutils.Vector(world_pos)
+
+    return [pos.x,pos.y,pos.z]
