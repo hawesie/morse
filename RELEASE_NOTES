@@ -1,3 +1,124 @@
+What's new in MORSE 1.3?
+========================
+
+General
+-------
+
+Components
+----------
+
+Robots
+++++++
+
+Actuators
++++++++++
+
+Sensors
++++++++
+
+Middlewares
+-----------
+
+Socket
+++++++
+
+- Socket middleware now accepts the keyword 'port' to specify on which port
+  you want the socket binds itself.
+
+
+MORSE 1.2
+=========
+
+General
+-------
+
+- Time management in Morse has been clarified (#388)
+- Implement the notion of zone, i.e. a 3d space which several properties which
+  can trigger various behaviours in the simulation. 
+- Add new services for the CamaraFP settings.
+- F7 moves CamaraFP above robots
+
+Components
+----------
+
+- Each component now has two new services:
+    - ``get_properties`` returns the list of the properties of the component
+    - ``get_configurations`` returns the value of the different properties of
+      the component.
+
+Robots
+++++++
+
+- Most robots are now using more realistic physical behaviour.
+
+Actuators
++++++++++
+
+- Armatures have received some love, with support for placing and controlling
+  inverse kinematics targets to easily control the full skeleton with inverse
+  kinematics.
+
+- The default ``ControlType`` of several actuators (v_omega, waypoint,
+  xy_omage, keyboard, joystick) has been switched from "Position" to
+  "Velocity". It basically means it relies more on the underlaying physic
+  engine, providing a more realistic behaviour, but it may be less repeatable.
+  Th previous behaviour can be restored by setting explicitly the
+  ``ControlType`` parameter of the actuator (#117).
+
+Sensors
++++++++
+
+- Each sensor has now an additional field ``timestamp`` exporting when the
+  data has been computed, in simulated time.
+- the GPS sensor has been vastly improved. In addition to (x, y, z) position,
+  it can also returns geodesic coordinates and velocity in the ``raw`` level
+  of details. Moreover, it exposes also time and heading in the ``extended``
+  level.
+- Batteries are now rechargeable in ``ChargingZone``.
+
+Middlewares
+-----------
+
+Pocolibs
+++++++++
+
+- ``pocolibs`` is now able to export velodyne sensor.
+
+Socket
+++++++
+
+- Add a new ``DepthCamera`` publisher.
+- ``VideoCamera`` now publish base64 encoded RGBA image.
+
+Builder API
+-----------
+
+API changes
++++++++++++
+
+- ``place_camera`` and ``aim_camera`` has been deprecated in favor of
+  ``set_camera_location`` and ``set_camera_rotation``. 
+- ``Velodyne`` became ``VelodyneRayCast`` and ``VelodyneZB`` became ``Velodyne``
+  ``VelodyneZB`` still works for compatibility.
+
+API addition
+++++++++++++
+
+- Add a method ``Environment.set_physics_step_sub`` allowing to control the
+  number of substep used by the physics engine. A bigger number will make the
+  simulation slower, but more realistic. The default value in Morse is 2.
+
+Pymorse
+-------
+
+API addition
+++++++++++++
+
+- Add two methods ``sleep`` and ``time`` to handle time-related request. These
+  methods are equivalent to the one provided by the ``Time`` module, but
+  considers properly the simulated time. It is recommended to use these
+  methods over ``Time`` one.
+
 MORSE 1.1
 =========
 
@@ -5,7 +126,8 @@ General
 -------
 
 - morse tools has now some options to easily create custom simulations: check
-  'morse {create|rm|add} --help' for more on that topic!
+  'morse {create|rm|add|...} --help' for more on that topic! (commit
+  71fc8a81121b, issue #396)
 
 Components
 ----------
@@ -20,6 +142,8 @@ Actuators
   particular, the color of light and its energy).  A new service 'toggle'
   allows to control it.
 - New 3D sound actuator {play,pause,stop} from local mp3 file.
+- Add a joystick actuator allowing to control directly your robot using a
+  joystick.
 
 Robots
 ++++++
@@ -34,9 +158,21 @@ Sensors
   which use a physic controller.
 - The semantic camera performance has been improved. It has a new option 'noocclusion'
   to disable occlusion testing and get even better performances.
+- The thermometer has been reworked to handle multiple fire sources,
+  potentially of different nature
+- Introduce a new sensor collision which allows to detect if the robot is in
+  collision with some objects of the environment.
+- Fix Camera resolutions ratio issue #371. We now create one Blender scene for
+  each camera in the simulation, with specific render resolution.
 
 Builder API
 -----------
+
+It is now possible to handle loop in builder script (#357). See
+:doc:`user/builder` for documentation about it.
+
+API addition
+++++++++++++
 
 - `make_ghost` method allows to transform the robot in ``ghost mode``
   (transparent and with no associated physics)
@@ -45,6 +181,12 @@ Builder API
   component. A service with similar name allows to do that at runtime too.
   (#337)
 - `set_speed_camera` allows to change the speed of the viewport camera.
+- `set_friction` allows to change friction parameter with the ground
+
+API changes
++++++++++++
+
+- `add_default_interface` has now a smarter behaviour (#399)
 
 Pymorse
 -------
@@ -52,6 +194,12 @@ Pymorse
 The Python bindings for MORSE have been completely rewritten and is now much
 more efficient (based on *asynchat* API). However, it is mostly an internal
 rewrite, and the interface does not change.
+
+Multi-node
+----------
+
+Rewrite the multi-node socket client/server (internal). Use JSON instead of
+unsafe `pickle`.
 
 Tools
 -----

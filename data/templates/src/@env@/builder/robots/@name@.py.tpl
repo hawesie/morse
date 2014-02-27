@@ -1,13 +1,13 @@
 from morse.builder import *
 
-class @classname@(Robot):
+class @classname@(GroundRobot):
     """
     A template robot model for @name@, with a motion controller and a pose sensor.
     """
-    def __init__(self, debug = True):
+    def __init__(self, name = None, debug = True):
 
         # @name@.blend is located in the data/robots directory
-        Robot.__init__(self, '@env@/robots/@name@.blend')
+        Robot.__init__(self, '@env@/robots/@name@.blend', name)
         self.properties(classpath = "@env@.robots.@name@.@classname@")
 
         ###################################
@@ -24,6 +24,7 @@ class @classname@(Robot):
         # Optionally allow to move the robot with the keyboard
         if debug:
             keyboard = Keyboard()
+            keyboard.properties(ControlType = 'Position')
             self.append(keyboard)
 
         ###################################

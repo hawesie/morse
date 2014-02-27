@@ -13,18 +13,19 @@ class ArmaturePose(morse.core.sensor.Sensor):
     .. note::
 
         This sensor **must** be added as a child of the armature
-        you want to sense, like in the example below:
+        you want to sense. See the *Examples* section below for an example.
 
-        .. code-block:: python
+    .. example::
 
-            robot = ATRV()
+        robot = ATRV()
 
-            arm = KukaLWR()
-            robot.append(arm)
-            arm.translate(z=0.9)
+        arm = KukaLWR()
+        robot.append(arm)
+        arm.translate(z=0.9)
 
-            arm_pose = ArmaturePose('arm_pose')
-            arm.append(arm_pose)
+        arm_pose = ArmaturePose()
+        # the sensor is appended to the armature, *not* to the robot
+        arm.append(arm_pose)
 
     This component only allows to *read* armature configuration. To change the
     armature pose, you need an :doc:`armature actuator <../actuators/armature>`.
@@ -45,6 +46,7 @@ class ArmaturePose(morse.core.sensor.Sensor):
 
 
     :sees: :doc:`armature actuator <../actuators/armature>`
+    :noautoexample:
     """
     _name = "Armature Pose Sensor"
     _short_desc = "Returns the joint state of a MORSE armature"
@@ -57,7 +59,7 @@ class ArmaturePose(morse.core.sensor.Sensor):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__,self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         self.armature = self._get_armature(self.bge_object)
         if not self.armature:

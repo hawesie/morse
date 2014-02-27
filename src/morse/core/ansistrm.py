@@ -68,7 +68,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
     reset = '\x1b[0m'
     
     def __init__(self, scheme = None):
-        super(ColorizingStreamHandler,self).__init__()
+        logging.StreamHandler.__init__(self)
         if scheme == "xmas":
             self.level_map = self.xmas_scheme
         elif scheme == "dark":
@@ -87,7 +87,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         try:
             message = self.format(record)
             # Don't do anything if the StreamHandler does not exist
-            if message == None:
+            if message is None:
                 return
             stream = self.stream
             if not self.is_tty:

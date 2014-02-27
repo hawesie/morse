@@ -2,9 +2,9 @@ import logging; logger = logging.getLogger("morse." + __name__)
 import roslib; roslib.load_manifest('sensor_msgs'); roslib.load_manifest('rospy')
 import rospy
 from sensor_msgs.msg import Image, CameraInfo
-from morse.middleware.ros import ROSPublisher
+from morse.middleware.ros import ROSPublisherTF
 
-class VideoCameraPublisher(ROSPublisher):
+class VideoCameraPublisher(ROSPublisherTF):
     """ Publish the image from the Camera perspective.
     And send the intrinsic matrix information in a separate topic of type
     `sensor_msgs/CameraInfo <http://ros.org/wiki/rviz/DisplayTypes/Camera>`_.
@@ -19,7 +19,7 @@ class VideoCameraPublisher(ROSPublisher):
         self.topic_camera_info = rospy.Publisher(self.topic_name+'/camera_info', CameraInfo)
 
     def finalize(self):
-        ROSPublisher.finalize(self)
+        ROSPublisherTF.finalize(self)
         # Unregister the CameraInfo topic
         self.topic_camera_info.unregister()
 
@@ -31,7 +31,6 @@ class VideoCameraPublisher(ROSPublisher):
 
         image = Image()
         image.header = self.get_ros_header()
-        image.header.frame_id += '/base_image'
         image.height = self.component_instance.image_height
         image.width = self.component_instance.image_width
         #image.encoding = 'rgba8'
@@ -54,6 +53,7 @@ class VideoCameraPublisher(ROSPublisher):
         camera_info.height = image.height
         camera_info.width = image.width
         camera_info.distortion_model = 'plumb_bob'
+        camera_info.D = [0]
         camera_info.K = [intrinsic[0][0], intrinsic[0][1], intrinsic[0][2],
                          intrinsic[1][0], intrinsic[1][1], intrinsic[1][2],
                          intrinsic[2][0], intrinsic[2][1], intrinsic[2][2]]
@@ -62,5 +62,5 @@ class VideoCameraPublisher(ROSPublisher):
                          intrinsic[1][0], intrinsic[1][1], intrinsic[1][2], Ty,
                          intrinsic[2][0], intrinsic[2][1], intrinsic[2][2], 0]
 
-        self.publish(image)
+        self.publish_with_robot_transform(image)
         self.topic_camera_info.publish(camera_info)

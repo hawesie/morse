@@ -17,11 +17,11 @@ class Velocity(morse.core.sensor.Sensor):
     _name = "Velocity"
     _short_descr = "A Velocity Sensor"
 
-    add_data('linear_velocity', [0.0, 0.0, 0.0], "vec3<float>", \
+    add_data('linear_velocity', [0.0, 0.0, 0.0], "vec3<float>",
              'velocity in sensor x, y, z axes (in meter . sec ^ -1)')
-    add_data('angular_velocity', [0.0, 0.0, 0.0], "vec3<float>", \
+    add_data('angular_velocity', [0.0, 0.0, 0.0], "vec3<float>",
              'rates in sensor x, y, z axes (in radian . sec ^ -1)')
-    add_data('world_linear_velocity', [0.0, 0.0, 0.0], "vec3<float>", \
+    add_data('world_linear_velocity', [0.0, 0.0, 0.0], "vec3<float>",
              'velocity in world x, y, z axes (in meter . sec ^ -1)')
 
     def __init__(self, obj, parent=None):
@@ -32,7 +32,7 @@ class Velocity(morse.core.sensor.Sensor):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         # The robot needs a physics controller!
         # Since the sensor does not have physics

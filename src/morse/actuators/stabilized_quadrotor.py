@@ -41,7 +41,7 @@ class StabilizedQuadrotor(morse.core.actuator.Actuator):
     def __init__(self, obj, parent=None):
         logger.info('%s initialization' %obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         # Env Variables
         self.v = [0.0, 0.0, 0.0]
@@ -107,9 +107,9 @@ class StabilizedQuadrotor(morse.core.actuator.Actuator):
                                   10.0 + 9.0 * (self.local_data['h_c'] - h) -
                                   2.0 * 0.7 * 3.0 * self.v[2]])
         acc_i = mathutils.Vector( rot.to_matrix()*acc_b )
-        self.v[0] = self.v[0] + dt * acc_i[0]
-        self.v[1] = self.v[1] + dt * acc_i[1]
-        self.v[2] = self.v[2] + dt * (acc_i[2] -10.0)
+        self.v[0] += dt * acc_i[0]
+        self.v[1] += dt * acc_i[1]
+        self.v[2] += dt * (acc_i[2] - 10.0)
 
         #Change the parent position
         prev_pos = parent.localPosition

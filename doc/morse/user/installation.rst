@@ -60,9 +60,10 @@ See their associated documentation for details.
 
 
 If you plan to use the simulator with raw sockets or text files as interface
-(for instance, to integrate MORSE with MatLab or other specific
-applications), you don't need anything else. Otherwise, you need to install
-the software for the desired middlewares:
+(for instance, to integrate MORSE with MatLab or other specific applications),
+you don't need anything else, and you can jump to MORSE's
+:doc:`Quickstart<../quickstart>`. Otherwise, you need to install the software
+for the desired middlewares:
 
 .. toctree::
     :glob:
@@ -130,17 +131,17 @@ repository::
 
   $ git clone https://github.com/morse-simulator/morse.git
   
-If you want to get only the latest stable version (1.0) of Morse, you can get
-it in the branch `1.0_STABLE`. You can get it directly using ::
+If you want to get only the latest stable version (1.2) of Morse, you can get
+it in the branch `1.2_STABLE`. You can get it directly using ::
  
-  $ git clone https://github.com/morse-simulator/morse.git -b 1.0_STABLE
+  $ git clone https://github.com/morse-simulator/morse.git -b 1.2_STABLE
 
 or if you have already download the repository ::
   
-  $ git checkout -b 1.0_STABLE -t origin/1.0_STABLE
+  $ git checkout -b 1.2_STABLE -t origin/1.2_STABLE
   
 You can get a `tarball version here
-<ftp://ftp.openrobots.org/pub/openrobots/morse/morse-1.0.tar.bz2>`_.
+<ftp://ftp.openrobots.org/pub/openrobots/morse/morse-1.2.tar.bz2>`_.
 
 Go to the directory where you have previously downloaded the MORSE source.
 Then type these commands::
@@ -201,9 +202,17 @@ You can check your configuration is ok with::
 .. note::
     When updating MORSE to a more recent version, you'll simply have to do::
 
-    $ git checkout [version]
+    $ git pull --rebase https://github.com/morse-simulator/morse.git [<refspec>]
     $ cd build
     $ make install
+
+    ``[<refspec>]`` being the branch or tag to sync with, as::
+
+    $ git pull --rebase https://github.com/morse-simulator/morse.git 1.2
+    $ git pull --rebase https://github.com/morse-simulator/morse.git master
+
+Time to jump to MORSE's :doc:`Quickstart<../quickstart>` tutorial!
+
 
 Installation troubleshooting
 ----------------------------

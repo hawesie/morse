@@ -12,59 +12,60 @@ It generates doc for:
     - the interfaces and serialization types for each input/output
 """
 
-from morse.actuators import armature, \
-                            destination,       \
-                            force_torque,      \
-                            gripper,           \
-                            light,             \
-                            keyboard,          \
-                            mocap_control,     \
-                            orientation,       \
-                            pa_10,             \
-                            ptu,               \
-                            rotorcraft_attitude, \
-                            rotorcraft_waypoint, \
-                            stabilized_quadrotor,\
-                            steer_force,        \
-                            teleport,           \
-                            v_omega,           \
-                            v_omega_diff_drive,\
-                            waypoint,          \
-                            xy_omega
+import os
+import sys
+import pkgutil
+import inspect
 
-from morse.sensors import accelerometer, \
-                          armature_pose, \
-                          battery,   \
-                          camera,    \
-                          compound,  \
-                          depth_camera, \
-                          gps,       \
-                          gyroscope, \
-                          human_posture, \
-                          imu,       \
-                          kinect,     \
-                          laserscanner, \
-                          mocap_posture, \
-                          odometry,  \
-                          pose,      \
-                          proximity, \
-                          ptu_posture, \
-                          search_and_rescue, \
-                          semantic_camera, \
-                          thermometer, \
-                          stereo_unit, \
-                          velocity, \
-                          video_camera
-                          
-from morse.modifiers import imu_noise, \
-                            pose_noise, \
-                            utm, \
-                            ned
-                                                      
+#
+# helpers
+#
+
+def get_classes_from_module(module_name):
+    __import__(module_name)
+    # Predicate to make sure the classes only come from the module in question
+    def predicate(member):
+        return inspect.isclass(member) and member.__module__.startswith(module_name)
+    # fetch all members of module name matching 'pred'
+    return inspect.getmembers(sys.modules[module_name], predicate)
+
+def get_submodules(module_name):
+    """ Get a list of submodules from a module name.
+    Not recursive, don't return nor look in subpackages """
+    __import__(module_name)
+    module = sys.modules[module_name]
+    module_path = getattr(module, '__path__')
+    return [name for _, name, ispkg in pkgutil.iter_modules(module_path) if not ispkg]
+
+def get_subclasses(module_name, skip_submodules=[]):
+    subclasses = []
+    submodules = get_submodules(module_name)
+    for submodule_name in submodules:
+        if submodule_name in skip_submodules:
+            pass
+        submodule = "%s.%s"%(module_name, submodule_name)
+        try:
+            submodule_classes = get_classes_from_module(submodule)
+            for _, klass in submodule_classes:
+                subclasses.append(klass)
+        except Exception:
+            # can not import some resources
+            pass
+    return subclasses
+
+modules = [
+    "morse.actuators",
+    "morse.sensors",
+    "morse.modifiers",
+    "morse.robots",
+]
+
 import sys, os, codecs
 import fnmatch
+from copy import copy
 
 from morse.core.actuator import Actuator
+from morse.core.robot import Robot
 from morse.core.sensor import Sensor
 from morse.modifiers.abstract_modifier import AbstractModifier
 
@@ -74,6 +75,9 @@ sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
 
 PREFIX = "."
 MEDIA_PATH = "../../media"
+
+# docstring role that, if present, prevent automatic generation of a code sample
+NOAUTOEXAMPLE = ":noautoexample:"
 
 # documentation of special parameters
 special_doc = {}
@@ -99,21 +103,53 @@ def insert_image(name):
 
     return ""
 
+def extract_examples(doc):
+    """
+    Returns a set of examples extracted (ie, removed) from a docstring.
+    Examples must be presented in a `.. example::` block.
+
+    :returns: a tuple (examples list, input doc with examples blocks removed)
+    """
+    examples = []
+
+    remaining_doc = []
+
+    i = 0
+    while i < len(doc):
+        if doc[i].strip() == ".. example::":
+            example = []
+            while True:
+                i += 1
+                if len(doc[i]) > 0 and doc[i][0] != ' ':
+                    remaining_doc.append(doc[i])
+                    break
+                else:
+                    example.append(doc[i])
+            examples.append("\n".join(example))
+        else:
+            remaining_doc.append(doc[i])
+        i += 1
+
+    return examples, remaining_doc
+
 def parse_docstring(doc):
     """ Parses the doc string, and return the doc without :param *: or :return:
     but with a list of params, return values and their associated doc.
 
     Also replace known keywords by hyperlinks.
-    Also replace :see: by 'See also:'
+    Also replace :see:/:sees: by 'See also:'
     """
+
+    generate_example = True
 
     # Try to 'safely' remove leading spaces introduced by natural Python
     # docstring formatting. We can not simply strip leading withspaces,
     # because they may be significant for rst (like in ..note:)
     orig = doc.split('\n')
     if (orig[0].strip()):
-        print("XXX Invalid docstring %s" % doc)
-        return (doc, None, None)
+        print("XXX Invalid docstring (first line of MORSE docstrings " \
+              "must be empty):\n%s" % doc)
+        return (doc, None, None, None, None)
 
     new = [""]
     
@@ -129,8 +165,18 @@ def parse_docstring(doc):
     for l in orig[1:]:
         new.append(l[trailing_space:])
 
+    examples, new = extract_examples(new)
+
     doc = "\n".join(new)
-    doc.replace(":see:", "'''\nSee also:'''")
+
+    # Pre-processing
+    if NOAUTOEXAMPLE in doc:
+        generate_example = False
+        doc = doc.replace(NOAUTOEXAMPLE, "")
+
+
+    doc = doc.replace(":see:", "\n**See also:**")
+    doc = doc.replace(":sees:", "\n**See also:**")
     r = doc.split(":param ", 1)
     doc = r[0]
     paramsdoc = None
@@ -141,9 +187,9 @@ def parse_docstring(doc):
             doc = parts[0]
             returndoc = parts[1].split(':', 1)[1]
             returndoc = returndoc.replace("\n", " ")
-            return (doc, None, returndoc)
+            return (doc, None, returndoc, generate_example, examples)
         else:
-            return (doc, None, None)
+            return (doc, None, None, generate_example, examples)
     else:
         parts= r[1].split(":return", 1)
 
@@ -158,86 +204,64 @@ def parse_docstring(doc):
         returndoc = returndoc.replace("\n", " ")
 
 
-    return (doc, paramsdoc,returndoc)
+    return (doc, paramsdoc,returndoc, generate_example, examples)
 
 components = {}
 
-m = sys.modules[__name__]
+# browse morse components modules
+for module in modules:
+    print("browse %s classes"%module)
+    for klass in get_subclasses(module):
+        print("process %s"%str(klass))
+        if issubclass(klass, Actuator):
+            ctype = 'actuator'
+        elif issubclass(klass, Sensor):
+            ctype = 'sensor'
+        elif issubclass(klass, AbstractModifier):
+            ctype = 'modifier'
+        elif issubclass(klass, Robot):
+            ctype = 'robot'
+        else:
+            print('not subclass %s'%str(klass))
+            continue
+        
+        component = klass
+        if hasattr(component, '_name'):
+            name = component._name
+            
+            try:
+                parent_name = component.mro()[1]._name
+                if name == parent_name:
+                    print("Component %s does not declare its own _name (name identical to parent <%s>). Skipping it." % (component.__name__, name))
+                    continue
+            except AttributeError:
+                pass
+        else:
+            print("Component %s does not declare a _name. Skipping it." % component.__name__)
+            continue
+        
+        if hasattr(component, '_short_desc'):
+            desc = getattr(component, '_short_desc')
+        else:
+            desc = ""
+        
+        components[name] = {'object': component,
+                            'type': ctype,
+                            'desc': desc,
+                            'module': sys.modules[klass.__module__],
+                            'doc': component.__doc__}
 
-# First, retreive components classes
-for module in [getattr(m, fn) for fn in dir(m)]:
-    for component in [getattr(module, fn) for fn in dir(module)]:
-
-        try:
-            name = component.__name__
-            ctype = None
-
-            if Actuator in component.mro() and name != 'Actuator':
-                print("Found actuator " + name)
-                ctype = 'actuator'
-                
-            if Sensor in component.mro() and name != 'Sensor':
-                print("Found sensor " + name)
-                ctype = 'sensor'
-
-            if AbstractModifier in component.mro() and name != 'AbstractModifier':
-                print("Found modifier " + name)
-                ctype = 'modifier'
-
-            if not ctype:
-                continue
-
-            if hasattr(component, '_name'):
-                name = component._name
-
-                try:
-                    parent_name = component.mro()[1]._name
-                    if name == parent_name:
-                        print("Component %s does not declare its own _name (name identical to parent <%s>). Skipping it." % (component.__name__, name))
-                        continue
-                except AttributeError:
-                    pass
-            else:
-                print("Component %s does not declare a _name. Skipping it." % name)
-                continue
-
-            if hasattr(component, '_short_desc'):
-                desc = getattr(component, '_short_desc')
-            else:
-                desc = ""
-
-            components[name] = {'object': component, 
-                                'type': ctype, 
-                                'desc': desc, 
-                                'module': module,
-                                'doc': component.__doc__}
-
-        except TypeError: # .mro() not defined => not a class => not a component
-            pass
-        except AttributeError: # .mro() not defined => not a class => not a component
-            pass
-
-# Extract abstraction levels
+# Extract levels, data_fields and properties
 for name, props in components.items():
     c = props['object'] # component class
-    if hasattr(c, "_levels"):
-        print("Found abstraction levels '" + str(c._levels) + "' in component " + name)
-        components[name]['levels'] = c._levels
-
-
-# Extract data fields
-for name, props in components.items():
-    c = props['object'] # component class
-    if hasattr(c, "_data_fields"):
-        print("Found datafields '" + str(c._data_fields) + "' in component " + name)
-        components[name]['data_fields'] = c._data_fields
-
-# Extract properties
-for name, props in components.items():
-    c = props['object'] # component class
-    if hasattr(c, "_properties"):
-        print("Found properties '" + str(c._properties) + "' in component " + name)
-        components[name]['properties'] = c._properties
+    for cls in reversed(c.__mro__):
+        for key in ['levels', 'data_fields', 'properties']:
+            attribute = '_' + key
+            if hasattr(cls, attribute):
+                if not key in components[name]:
+                    components[name][key] = copy(getattr(cls, attribute))
+                else:
+                    components[name][key].update(getattr(cls, attribute))
 
 # Then, extract services
 for name, props in components.items():
@@ -287,15 +311,21 @@ def print_code_snippet(out, name, props):
     title = "Examples"
     out.write(underline(title, '-') + '\n')
 
-    out.write("\nThe following example shows how to use this component in a *Builder* script:\n\n")
+    out.write("\nThe following examples show how to use this component in a *Builder* script:\n\n")
 
+def generate_builder_example(out, name, props):
     args = {'var': props["object"].__name__.lower(), 'name':props["object"].__name__, 'type': props['type']}
 
     code = """
     from morse.builder import *
+    """
 
+    if props['type'] != 'robot':
+        code += """
     robot = ATRV()
+    """
 
+    code += """
     # creates a new instance of the %(type)s
     %(var)s = %(name)s()
 
@@ -310,9 +340,12 @@ def print_code_snippet(out, name, props):
     %(var)s.level(<level>)
     """ % args
 
-    code += """
+    if props['type'] != 'robot':
+        code += """
     robot.append(%(var)s)
+    """ % args
 
+    code += """
     # define one or several communication interface, like 'socket'
     %(var)s.add_interface(<interface>)
 
@@ -397,7 +430,7 @@ def print_levels(out, name, props):
             out.write("\tAt this level, the %s %s these datafields at each simulation step:\n\n" % ( props["type"], "exports" if props["type"] == "sensor" else "reads"))
 
             for fieldname, prop in props["data_fields"].items():
-                if prop[3] == name:
+                if name is "all" or name in prop[3]:
                     out.write('\t- ``' + fieldname + '`` (' + (prop[1] + ', ' if prop[1] else '' ) + 'initial value: ``' + str(prop[0]) + '``): ' + prop[2] + "\n")
 
             out.write("\n\t*Interface support:*\n\n%s\n\n" % supported_interfaces(props["object"].__module__ + '.' + props["object"].__name__, name, tabs = 1))
@@ -430,6 +463,9 @@ def print_properties(out, name, props):
         out.write(".. cssclass:: properties morse-section\n\n")
         title = "Configuration parameters for " + name.lower()
         out.write(underline(title, '-') + '\n')
+
+        if props['type'] == 'robot':
+            out.write("\nYou can :\n\n- set the mass of the robot using the builder method :py:meth:`morse.builder.morsebuilder.Robot.set_mass()`\n- set the friction coefficient of the robot using the builder method :py:meth:`morse.builder.morsebuilder.Robot.set_friction()`\n\n")
 
         try:
             prop = props['properties']
@@ -464,10 +500,10 @@ def print_services(out, name, props):
         for name, serv in services.items():
             out.write('- ``' + name + '(')
 
-            doc = params = returndoc = None
+            doc = params = returndoc = generate_example = examples = None
 
             if serv['doc']:
-                doc, params, returndoc = parse_docstring(serv['doc'])
+                doc, params, returndoc, generate_example, examples = parse_docstring(serv['doc'])
 
             if params:
                 out.write(", ".join([p for p,d in params]))
@@ -498,12 +534,10 @@ def print_services(out, name, props):
 if not os.path.exists(PREFIX):
     os.makedirs(PREFIX)
 
-if not os.path.exists(os.path.join(PREFIX, 'actuators')):
-    os.makedirs(os.path.join(PREFIX, 'actuators'))
-if not os.path.exists(os.path.join(PREFIX, 'sensors')):
-    os.makedirs(os.path.join(PREFIX, 'sensors'))
-if not os.path.exists(os.path.join(PREFIX, 'modifiers')):
-    os.makedirs(os.path.join(PREFIX, 'modifiers'))
+for directory in ['actuators', 'sensors', 'modifiers', 'robots']:
+    path = os.path.join(PREFIX, directory)
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 for name, props in components.items():
     module = (props['object'].__module__.split('.'))[-1]
@@ -517,15 +551,23 @@ for name, props in components.items():
         if props['desc']:
             out.write("\n**" + props['desc'] + "**\n\n")
 
-        out.write(parse_docstring(props['doc'])[0] + "\n\n")
+        doc, params, returndoc, generate_example, examples = parse_docstring(props['doc'])
+        out.write(doc + "\n\n")
 
         print_properties(out, name, props)
-        if not print_levels(out, name, props) and props['type'] != 'modifier':
+        if not print_levels(out, name, props) and \
+               props['type'] not in ['modifier', 'robot']:
             print_data(out, name, props)
 
         if props['type'] != 'modifier':
             print_services(out, name, props)
-            print_code_snippet(out, name, props)
+            if generate_example or examples:
+                print_code_snippet(out, name, props)
+                if generate_example:
+                    generate_builder_example(out, name, props)
+                for example in examples:
+                    out.write(insert_code(example))
+
         print_files(out, name, props)
 
         out.write('\n\n*(This page has been auto-generated from MORSE module %s.)*\n' % (props['object'].__module__) )
@@ -608,7 +650,8 @@ def generate_matrix(filename):
         actuators_list.sort()
         
         first_line = ['Features']
-        first_line.extend(datastreams)
+        link_datastreams = [':doc:`' + d + ' <middlewares/' + d + '>`' for d in datastreams]
+        first_line.extend(link_datastreams)
         add_csv_line(out, first_line)
         add_csv_line(out, ['Communications,'])
         add_csv_line(out, ['``Datastreams``', '✔', '✔', '✔ (ports)', '✔ (topics)',  '✔ (posters)', '✔ (database)'])

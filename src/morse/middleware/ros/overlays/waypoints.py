@@ -13,14 +13,14 @@ class WayPoint(MorseOverlay):
 
     def __init__(self, overlaid_object):
         # Call the constructor of the parent class
-        super(self.__class__,self).__init__(overlaid_object)
+        MorseOverlay.__init__(self, overlaid_object)
 
     def move_base_on_completion(self, result):
         state, value = result
 
         logger.info("MoveBase completed! got value " + str(value))
 
-        return (state, MoveBaseResult())
+        return state, MoveBaseResult()
 
     @interruptible
     @ros_action(type = MoveBaseAction)

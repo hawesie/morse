@@ -1,12 +1,16 @@
 # Base concept 
 
 add_morse_test(base_testing)
+add_morse_test(renaming_testing)
+add_morse_test(builder_wheeled_robot)
+add_morse_test(friction_testing)
 add_morse_test(levels)
 
 # Sensor
 
 add_morse_test(armature_pose_testing)
 add_morse_test(battery_testing)
+add_morse_test(depth_camera_testing)
 add_morse_test(gps_testing)
 add_morse_test(gyroscope_testing)
 add_morse_test(odometry_testing)
@@ -18,6 +22,7 @@ add_morse_test(thermometer_testing)
 add_morse_test(search_and_rescue_testing)
 add_morse_test(velocity_testing)
 add_morse_test(video_camera_testing)
+add_morse_test(collision_testing)
 
 # Actuator
 

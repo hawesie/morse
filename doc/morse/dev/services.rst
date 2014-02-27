@@ -223,7 +223,7 @@ object.
 Interruption policy for asynchronous services
 ---------------------------------------------
 
-As of ``morse-1.0``, only one asynchronous service may run at a given time.
+As of ``morse-1.2``, only one asynchronous service may run at a given time.
 
 You can define the behaviour of the simulator when a second request is received
 either at the middleware level (*global policy*) or at the individual service
@@ -253,7 +253,7 @@ method, as shown in the example below).
              self.local_data['x'] = self.bge_object.worldPosition[0]
              self.local_data['y'] = self.bge_object.worldPosition[1]
              self.local_data['z'] = self.bge_object.worldPosition[2]
-             super(Waypoint, self).interrupt()
+             morse.core.actuator.Actuator.interrupt(self)
 
 .. note::
     It is recommended to always implement the ``interrupt`` method even if the

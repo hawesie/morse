@@ -2,6 +2,8 @@ import logging; logger = logging.getLogger("morsebuilder." + __name__)
 import os
 import json
 from morse.builder.morsebuilder import *
+from morse.builder.abstractcomponent import Configuration
+from morse.core.morse_time import TimeStrategies
 
 class Environment(Component):
     """ Class to configure the general environment of the simulation
@@ -41,14 +43,23 @@ class Environment(Component):
         self._multinode_configured = False
         self._display_camera = None
         self.is_material_mode_custom = False
+        self._node_name = None
+        self._physics_step_sub = 2
+        # Add empty object holdings MORSE Environment's properties
+        # for UTM modifier configutation ( uses env.properties(...) )
+        bpymorse.deselect_all()
+        bpymorse.add_morse_empty()
+        obj = bpymorse.get_context_object()
+        obj.name = 'MORSE.Properties'
+        self.set_blender_object(obj)
+        # Init. camera's properties
+        self.set_camera_speed()
+        self.set_camera_clip()
 
-        # define 'Scene_Script_Holder' as the blender object of Enrivonment
-        if not 'Scene_Script_Holder' in bpymorse.get_objects():
-            # Add the necessary objects
-            base = Component('props', 'basics')
-        self.set_blender_object(bpymorse.get_object('Scene_Script_Holder'))
-        # Write the name of the 'environment file'
-        self.set_camera_speed(2.0)
+    def is_internal_camera(self, camera):
+        return not self._multinode_configured or \
+            self._node_name in self.multinode_distribution and \
+            camera._bpy_object.parent.name in self.multinode_distribution[self._node_name]
 
     def _write_multinode(self, node_name):
         """ Configure this node according to its name
@@ -102,35 +113,33 @@ class Environment(Component):
         and only the hierarchy is added to the name.
         """
 
-        import inspect
-        try:
-            frame = inspect.currentframe()
-            builderscript_frame = inspect.getouterframes(frame)[2][0] # parent frame
+        AbstractComponent.close_context(3)
 
-            for name, component in builderscript_frame.f_locals.items():
-                if isinstance(component, AbstractComponent):
+        for component in AbstractComponent.components:
+            if isinstance(component, Robot):
 
-                    if hasattr(component, "parent"):
-                        continue
+                def renametree(cmpt, fqn):
+                    if not cmpt.basename:
+                        return
+#                        raise SyntaxError("You need to assign the component of type %s to a variable" %
+#                                        cmpt)
+                    list_name = [cmpt._bpy_object.name for cmpt in AbstractComponent.components if cmpt != component ]
+                    fqn.append(cmpt.basename)
+                    new_name = '.'.join(fqn)
 
-                    if not component.basename: # do automatic renaming only if a name is not already manually set
-                        component.basename = name
-
-                    def renametree(cmpt, fqn):
-                        if not cmpt.basename:
-                            raise SyntaxError("You need to assign the component of type %s to a variable" %
-                                             cmpt)
-                        fqn.append(cmpt.basename)
+                    i = 1
+                    while new_name in list_name:
+                        fqn.pop()
+                        fqn.append("%s_%03d" % (cmpt.basename, i))
                         new_name = '.'.join(fqn)
-                        Configuration.update_name(cmpt.name, new_name)
-                        cmpt._bpy_object.name = '.'.join(fqn)
-                        for child in cmpt.children:
-                            renametree(child, fqn[:])
+                        i += 1
 
-                    renametree(component, [])
-        finally:
-            del builderscript_frame
-            del frame
+                    Configuration.update_name(cmpt.name, new_name)
+                    cmpt._bpy_object.name = new_name
+                    for child in cmpt.children:
+                        renametree(child, fqn[:])
+
+                renametree(component, [])
 
     def _handle_default_interface(self):
         """
@@ -154,25 +163,33 @@ class Environment(Component):
 
 
     def place_camera(self, location):
+        logger.warning("`place_camera` is deprecated, use `set_camera_location` instead")
+        self.set_camera_location(location)
+
+    def aim_camera(self, rotation):
+        logger.warning("`aim_camera` is deprecated, use `set_camera_rocation` instead")
+        self.set_camera_rotation(rotation)
+
+    def set_camera_location(self, location):
         """ Set the location of the default camera.
 
         :param location: list with the new 3D coordinates for the camera.
 
         .. code-block:: python
 
-            env.place_camera([10.0, -10.0, 3.0])
+            env.set_camera_location([10.0, -10.0, 3.0])
 
         """
         self._camera_location = location
 
-    def aim_camera(self, rotation):
+    def set_camera_rotation(self, rotation):
         """ Set the orientation of the default camera
 
         :param rotation: list with an euler rotation for the camera.
 
         .. code-block:: python
 
-            env.aim_camera([1.3300, 0, 0.7854])
+            env.set_camera_rotation([1.3300, 0, 0.7854])
 
         """
         self._camera_rotation = rotation
@@ -183,18 +200,38 @@ class Environment(Component):
         :param clip_start: Camera near clipping distance, float in meters (default 0.1)
         :param clip_end: Camera far clipping distance, float in meters (default 100)
         """
-        camera_fp = bpymorse.get_object('CameraFP')
-        # camera_fp.data holds the bpy.types.Camera instance
-        camera_fp.data.clip_start = clip_start
-        camera_fp.data.clip_end = clip_end
+        self._camera_clip_start = clip_start
+        self._camera_clip_end   = clip_end
 
-    def set_camera_speed(self, speed):
+    def set_camera_speed(self, speed=2.0):
         """ Set the simulator's Camera speed
 
         :param speed: desired speed of the camera, in meter by second.
         """
-        camera_fp = bpymorse.get_object('CameraFP')
-        camera_fp.game.properties['Speed'].value = speed
+        self._camera_speed = speed
+
+    def _cfg_camera_scene(self):
+        scene = bpymorse.get_context_scene()
+        scene.name = 'S.MORSE_LOGIC'
+        from morse.builder.sensors import VideoCamera
+        cfg_camera_scene = []
+        for component in AbstractComponent.components:
+            # do not create scene for external camera
+            if isinstance(component, VideoCamera) and \
+                    self.is_internal_camera(component):
+                res_x = component.property_value('cam_width')
+                res_y = component.property_value('cam_height')
+                name = 'S.%dx%d' % (res_x, res_y)
+                if not name in cfg_camera_scene:
+                    # Create a new scene for the Camera
+                    bpymorse.new_scene(type='LINK_OBJECTS')
+                    scene = bpymorse.get_context_scene()
+                    scene.name = name
+                    scene.render.resolution_x = res_x
+                    scene.render.resolution_y = res_y
+                    scene.game_settings.physics_engine = 'NONE'
+                    # TODO disable logic and physic in this created scene
+                    cfg_camera_scene.append(name)
 
     def create(self, name=None):
         """ Generate the scene configuration and insert necessary objects
@@ -207,28 +244,62 @@ class Environment(Component):
             if hasattr(component, "after_renaming"):
                 component.after_renaming()
 
-        # Default node name
-        if name == None:
+        # Compute node name
+        if name is None:
             try:
-                name = os.environ["MORSE_NODE"]
+                self._node_name = os.environ["MORSE_NODE"]
             except KeyError:
-                name = os.uname()[1]
+                self._node_name = os.uname()[1]
+        else:
+            self._node_name = name
+
+        # Create a new scene for each camera, with specific render resolution
+        # Must be done at the end of the builder script, after renaming
+        # and before adding 'Scene_Script_Holder'
+        self._cfg_camera_scene()
+
+        # Create a new scene for the MORSE_LOGIC (Scene_Script_Holder, CameraFP)
+        scene = bpymorse.set_active_scene('S.MORSE_LOGIC')
+        scene.game_settings.physics_engine = 'BULLET'
+        scene.game_settings.physics_step_sub = self._physics_step_sub
+        # set simulation view resolution (4:3)
+        scene.render.resolution_x = 800
+        scene.render.resolution_y = 600
+
+        # define 'Scene_Script_Holder' as the blender object of Enrivonment
+        if not 'Scene_Script_Holder' in bpymorse.get_objects():
+            # Add the necessary objects
+            base = Component('props', 'basics')
+
+        # Set Scene_Script_Holder as core Environment object
+        self.set_blender_object(bpymorse.get_object('Scene_Script_Holder'))
+        # Copy properties (for UTM modifier configuration)
+        _properties = bpymorse.get_properties(bpymorse.get_object('MORSE.Properties'))
+        self.properties(**_properties)
+
         # Write the configuration of the datastreams, and node configuration
         Configuration.write_config()
-        self._write_multinode(name)
+        self._write_multinode(self._node_name)
 
         # Change the Screen material
         if self._display_camera:
             self._set_scren_mat()
 
+        # Write the name of the 'environment file'
         self.properties(environment_file = str(self._environment_file))
-        # Set the position of the camera
-        camera_fp = bpymorse.get_object('CameraFP')
-        camera_fp.location = self._camera_location
-        camera_fp.rotation_euler = self._camera_rotation
+
+        # Default time management
+        if 'time_management' not in self._bpy_object.game.properties.keys():
+            self.properties(time_management = TimeStrategies.BestEffort)
 
         if self.fastmode:
-            self.set_material_mode('SINGLETEXTURE')
+            # SINGLETEXTURE support has been removed between 2.69 and
+            # 2.70. Handle properly the case where it is not defined
+            # anymore.
+            try:
+                self.set_material_mode('SINGLETEXTURE')
+            except TypeError:
+                self.set_material_mode('MULTITEXTURE')
             self.set_viewport("WIREFRAME")
         elif not self.is_material_mode_custom:
             # make sure OpenGL shading language shaders (GLSL) is the
@@ -244,14 +315,29 @@ class Environment(Component):
         # Start player with a visible mouse cursor
         bpymorse.get_context_scene().game_settings.show_mouse = True
 
+        # Set the position of the camera
+        camera_fp = bpymorse.get_object('CameraFP')
+        camera_fp.location = self._camera_location
+        camera_fp.rotation_euler = self._camera_rotation
+        camera_fp.game.properties['Speed'].value = self._camera_speed
+        camera_fp.data.clip_start = self._camera_clip_start
+        camera_fp.data.clip_end   = self._camera_clip_end
+        camera_fp.data.lens = 20 # set focal length in mm
         # Make CameraFP the active camera
         bpymorse.deselect_all()
         camera_fp.select = True
         bpymorse.get_context_scene().objects.active = camera_fp
         # Set default camera
         bpymorse.get_context_scene().camera = camera_fp
+        # Set viewport to Camera
+        bpymorse.set_viewport_perspective()
+
+        hud_text = bpymorse.get_object('Keys_text')
+        hud_text.scale.y = 0.027 # to fit the HUD_plane
 
         self._created = True
+        # in case we are in edit mode, do not exit on error with CLI
+        sys.excepthook = sys_excepthook # Standard Python excepthook
 
     def set_horizon_color(self, color=(0.05, 0.22, 0.4)):
         """ Set the horizon color
@@ -310,23 +396,46 @@ class Environment(Component):
         bpymorse.get_context_scene().game_settings.material_mode = material_mode
         self.is_material_mode_custom = True
 
-    def set_viewport(self, viewport_shade='WIREFRAME'):
+    def set_viewport(self, viewport_shade='WIREFRAME', clip_end=1000):
         """ Set the default view mode
 
         :param viewport_shade: enum in ['BOUNDBOX', 'WIREFRAME', 'SOLID', 'TEXTURED'], default 'WIREFRAME'
         """
-        for area in bpymorse.get_context_window().screen.areas:
-            if area.type == 'VIEW_3D':
-                for space in area.spaces:
-                    if space.type == 'VIEW_3D':
-                        space.viewport_shade = viewport_shade
+        bpymorse.set_viewport(viewport_shade, clip_end)
 
     def set_auto_start(self, auto_start=True):
         bpymorse.get_context_scene().render.engine = 'BLENDER_GAME'
         bpymorse.get_context_scene().game_settings.use_auto_start = auto_start
 
+    def set_time_strategy(self, strategy):
+        """ Choose the time strategy for the current simulation
+
+        :param strategy:  the strategy to choose. Must be one of value
+        of :py:class:`morse.builder.TimeStrategies`
+        """
+        if strategy == TimeStrategies.FixedSimulationStep:
+            bpymorse.get_context_scene().game_settings.use_frame_rate = 0
+        elif strategy == TimeStrategies.BestEffort:
+            bpymorse.get_context_scene().game_settings.use_frame_rate = 1
+        else:
+            raise ValueError(strategy)
+
+        self.properties(time_management = strategy)
+
+    def fullscreen(self, fullscreen=True):
+        """ Run the simulation fullscreen
+
+        :param fullscreen: Start player in a new fullscreen display
+        :type  fullscreen: Boolean, default: True
+        """
+        bpymorse.fullscreen(fullscreen)
+
     def set_debug(self, debug=True):
-        """ Set the debug bit in blender """
+        """ Set Blender debug mode
+
+        :param debug: set when blender is running in debug mode (started with --debug)
+        :type  debug: Boolean, default: True
+        """
         bpymorse.set_debug(debug)
 
     def set_stereo(self, mode='ANAGLYPH', eye_separation=0.1, stereo='STEREO'):
@@ -354,6 +463,18 @@ class Environment(Component):
         :param record: boolean, default True
         """
         bpymorse.get_context_scene().game_settings.use_animation_record = record
+
+    def set_physics_step_sub(self, step_sub):
+        """ Configure the number of physics sub step per physics step.
+
+        Basically, if you increase the step_sub value, your simulation
+        will spent more time in computing physics, but it will be more
+        precise. The default value is 2.
+
+        See also
+        http://www.blender.org/documentation/blender_python_api_2_63_0/bpy.types.SceneGameData.html#bpy.types.SceneGameData.physics_step_sub
+        """
+        self._physics_step_sub = step_sub
 
     def configure_multinode(self, protocol='socket',
             server_address='localhost', server_port='65000', distribution=None):
@@ -385,7 +506,7 @@ class Environment(Component):
         self._protocol = protocol
         self._server_address = server_address
         self._server_port = server_port
-        if distribution != None:
+        if distribution is not None:
             self.multinode_distribution = distribution
         self._multinode_configured = True
 

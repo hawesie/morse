@@ -14,7 +14,6 @@ except ImportError:
 
 import os
 import sys
-import time
 from pymorse import Morse
 
 def send_force(s, steer, force, brake):
@@ -36,7 +35,8 @@ class SteerForceTest(MorseTestCase):
         steer_force.add_stream('socket')
 
         env = Environment('land-1/rosace_1', fastmode = True)
-        env.add_service('socket')
+        env.set_physics_step_sub(1)
+        env.set_camera_location([50.0, -20.0, 50.0])
 
     def test(self):
         with Morse() as morse:
@@ -53,21 +53,19 @@ class SteerForceTest(MorseTestCase):
             steer_client = morse.robot.steer_force
 
             send_force(steer_client, 0.0, -20.0, 0.0)
-            time.sleep(3.0)
+            morse.sleep(3.0)
             send_force(steer_client, 0.0, 0.0, 10.0)
-            time.sleep(1.0)
+            morse.sleep(1.0)
 
             pose = pose_stream.get()
             self.assertAlmostEqual(pose['x'], x + 8.0, delta = 1.0)
             self.assertAlmostEqual(pose['y'], y, delta = 1.0)
 
-
-
             # Doubling the force 
             send_force(steer_client, 0.0, -40.0, 0.0)
-            time.sleep(3.0)
+            morse.sleep(3.0)
             send_force(steer_client, 0.0, 0.0, 10.0)
-            time.sleep(2.0)
+            morse.sleep(2.0)
 
             pose = pose_stream.get()
             self.assertAlmostEqual(pose['x'], x + 26.5, delta = 1.0)
@@ -75,9 +73,9 @@ class SteerForceTest(MorseTestCase):
 
             # Backward move
             send_force(steer_client, 0.0, 10.0, 0.0)
-            time.sleep(10.5)
+            morse.sleep(11.0)
             send_force(steer_client, 0.0, 0.0, 10.0)
-            time.sleep(2.0)
+            morse.sleep(2.0)
 
             pose = pose_stream.get()
             self.assertAlmostEqual(pose['x'], x, delta = 1.5)
@@ -85,13 +83,13 @@ class SteerForceTest(MorseTestCase):
 
             # Turning
             send_force(steer_client, -1.0, -10.0, 0.0)
-            time.sleep(10)
+            morse.sleep(10)
             send_force(steer_client, 0.0, 0.0, 10.0)
-            time.sleep(2.0)
+            morse.sleep(2.0)
             pose = pose_stream.get()
 
             self.assertAlmostEqual(pose['yaw'], 2.25, delta = 0.2)
-            self.assertAlmostEqual(pose['x'], x - 2.5, delta = 1.0)
+            self.assertAlmostEqual(pose['x'], x - 3.5, delta = 1.0)
             self.assertAlmostEqual(pose['y'], x - 6.0, delta = 1.0)
 
 

@@ -161,13 +161,13 @@ Ros middleware :tag:`ros`
 +++++++++++++++++++++++++
 
 Ros middleware provides two useful base class
-:py:class:`morse.middleware.ros.abstract_ros.ROSReader` and
+:py:class:`morse.middleware.ros.abstract_ros.ROSSubscriber` and
 :py:class:`morse.middleware.ros.abstract_ros.ROSPublisher`, respectively for
 actuator and sensor. In particular, they provide some facilities to manage
 topics. If you use these classes, you do not need to define ``_type_name`` and
 ``_type_url``, but to fill ``ros_class``, the previous information will be
 derived automatically from it. If you write a Reader, you need to override the
-:py:meth:`morse.middleware.ros.abstract_ros.ROSReader.update` method, which
+:py:meth:`morse.middleware.ros.abstract_ros.ROSSubscriber.update` method, which
 takes a message and must modifier ``self.data`` accordingly. For a Publisher,
 you need to override inherited ``default`` method. Don't forget to call
 ``self.publish(msg)`` otherwise nothing will happen.
@@ -217,7 +217,7 @@ method, do not forget to call respectively ``read`` or ``write``.
         _type_name = "POM_POS"
 
         def initialize(self):
-            super(self.__class__, self).initialize(POM_POS)
+            PocolibsDataStreamOutput.initialize(self, POM_POS)
 
             # Initialise the object
             self.obj = POM_POS()

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 
 set(PACKAGE_NAME morse)
-set(PACKAGE_VERSION "1.0.99")
+set(PACKAGE_VERSION "1.2")
 
 # only available from cmake-2.8.4
 if(COMMAND cmake_policy)
@@ -113,7 +113,7 @@ CONFIGURE_FILE(
    )
 INSTALL(PROGRAMS
        ${CMAKE_CURRENT_BINARY_DIR}/bin/morserun.py
-       ${CMAKE_CURRENT_BINARY_DIR}/bin/morse_inspector.py
+       ${CMAKE_CURRENT_BINARY_DIR}/bin/morse_inspector
        ${CMAKE_CURRENT_BINARY_DIR}/bin/multinode_server.py
        DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
        )
@@ -133,7 +133,7 @@ CONFIGURE_FILE(
 INSTALL(PROGRAMS
 		${CMAKE_CURRENT_BINARY_DIR}/bin/morse
 		${CMAKE_CURRENT_BINARY_DIR}/bin/morseexec
-		${CMAKE_CURRENT_SOURCE_DIR}/bin/morse_inspector.py
+		${CMAKE_CURRENT_SOURCE_DIR}/bin/morse_inspector
 		${CMAKE_CURRENT_BINARY_DIR}/bin/multinode_server
 		DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
 	    )
@@ -256,6 +256,7 @@ ELSE()
 		INSTALL(FILES ${SPHINX_MAN_OUTPUT}/morse.1.gz 
 					  ${SPHINX_MAN_OUTPUT}/morse-run.1.gz 
 					  ${SPHINX_MAN_OUTPUT}/morse-create.1.gz 
+					  ${SPHINX_MAN_OUTPUT}/morse-import.1.gz 
 					  ${SPHINX_MAN_OUTPUT}/morse-edit.1.gz 
 					  ${SPHINX_MAN_OUTPUT}/morse-check.1.gz 
 					  ${SPHINX_MAN_OUTPUT}/morse-add.1.gz 
