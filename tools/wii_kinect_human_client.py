@@ -84,7 +84,7 @@ def main():
         msg = wiimote.get_mesg()
         wiimote.disable(cwiid.FLAG_NONBLOCK)
 
-        if msg != None :
+        if msg is not None :
             if msg[0][0] == cwiid.MESG_BTN :
                 button = msg[0][1]
                 t = detect_button(button)
@@ -102,7 +102,7 @@ def main():
         # Don't want to use it for the moment
         wiimote.rpt_mode = cwiid.RPT_ACC
         msg1 = wiimote.get_mesg()
-        if msg1 != None :
+        if msg1 is not None :
             if msg1[0][0] == cwiid.MESG_ACC :
                 acceleration(msg1[0][1],wm_cal)
         """
@@ -231,10 +231,10 @@ def buttonPressAllTab(t) :
 
     ################ grasp option ##############
     if cwiid.BTN_B in t and not grasped :
-        grasp("t")
+        grasp(True)
         grasped = True
     elif cwiid.BTN_B not in t and grasped :
-        grasp("f")
+        grasp(False)
         grasped = False
 
 
@@ -298,7 +298,7 @@ def grasp(seq):
     """ Sending socket messages """
     global id_
 
-    msg = "id%s mocap_human grasp_ [\"%s\"]\n" % (str(id_), str(seq))
+    msg = "id%s mocap_human grasp [%i]\n" % (str(id_), seq)
     s.send(msg)
     print("Socket grasp sent")
     id_ = id_ + 1

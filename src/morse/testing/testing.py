@@ -13,12 +13,20 @@ import subprocess
 import signal
 
 from morse.testing.exceptions import MorseTestingError
+from morse.core.morse_time import TimeStrategies
 
 BLENDER_INITIALIZATION_TIMEOUT = 15 # seconds
 
+MODE_INDEX = 0
+CURRENT_TIME_MODE = None
+ALL_TIME_MODES = None
+INITIALIZED_LOGGER = False
+
 class MorseTestRunner(unittest.TextTestRunner):
+
         
     def setup_logging(self):
+        global INITIALIZED_LOGGER
         logger = logging.getLogger('morsetesting')
         logger.setLevel(logging.DEBUG)
 
@@ -30,9 +38,12 @@ class MorseTestRunner(unittest.TextTestRunner):
         ch.setFormatter(formatter)
 
         logger.addHandler(ch)
+        INITIALIZED_LOGGER = True
 
     def run(self, suite):
-        self.setup_logging()
+        global INITIALIZED_LOGGER
+        if not INITIALIZED_LOGGER:
+            self.setup_logging()
         return unittest.TextTestRunner.run(self, suite)
 
 def follow(file):
@@ -47,6 +58,14 @@ def follow(file):
             sleep(0.1)    # Sleep briefly
             continue
         yield line
+
+class MorseSwitchTimeMode(unittest.TestCase):
+    def test_switch(self):
+        global ALL_TIME_MODES
+        global CURRENT_TIME_MODE
+        global MODE_INDEX
+        CURRENT_TIME_MODE = ALL_TIME_MODES[MODE_INDEX]
+        MODE_INDEX += 1
 
 class MorseTestCase(unittest.TestCase):
 
@@ -82,7 +101,7 @@ class MorseTestCase(unittest.TestCase):
 
     def setUp(self):
         
-        testlogger.info("Starting test " + self.id())
+        testlogger.info("Starting test " + self.id() + " in " + TimeStrategies.human_repr(CURRENT_TIME_MODE))
 
         self.logfile_name = self.__class__.__name__ + ".log"
         # Wait for a second
@@ -213,7 +232,7 @@ class MorseTestCase(unittest.TestCase):
         try:
             sock.connect(("localhost", 4000))
             sock.send(b"id1 simulation quit\n")
-        except (ConnectionRefusedError, KeyboardInterrupt):
+        except (socket.error, KeyboardInterrupt):
             sock.close()
             sock = None
             testlogger.info("MORSE crashed")
@@ -244,6 +263,9 @@ class MorseTestCase(unittest.TestCase):
             tmp.write(b"from morse.builder.blenderobjects import *\n")
             tmp.write(b"class MyEnv():\n")
             tmp.write(inspect.getsource(test_case.setUpEnv).encode())
+            tmp.write(b"        env.set_time_strategy(")
+            tmp.write(TimeStrategies.python_repr(CURRENT_TIME_MODE))
+            tmp.write(b")\n")
             tmp.write(b"MyEnv().setUpEnv()\n")
             tmp.flush()
             tmp_name = tmp.name
@@ -251,6 +273,57 @@ class MorseTestCase(unittest.TestCase):
         testlogger.info("Created a temporary builder file for test-case " +\
             test_case.__class__.__name__)
         return tmp_name
+
+
+class MorseMoveTestCase(MorseTestCase):
+    """ This subclass of MorseTestCase can be used to check for moving
+    actuator, basically by testing a complete pose
+
+    This class assumes lot of stuff to work properly:
+        - the tested robot is called 'robot'
+        - the pose sensor is called 'robot.pose'
+        - if assertAlmostEqualPositionThenFix,  it assumes there is a
+            - a 'robot.motion' actuator (basically what we test)
+            - a 'robot.teleport' actuator (to move to a specific
+              situation)
+    """
+
+    def assertAlmostEqualPosition(self, morse, tested_pos, precision):
+        """ 
+        Test against a position, presented as an array of 6 double (x,
+        y, z, yaw, pitch, roll)
+        """
+        pose = morse.robot.pose.get()
+        self.assertAlmostEqual(pose['x'], tested_pos[0], delta=precision)
+        self.assertAlmostEqual(pose['y'], tested_pos[1], delta=precision)
+        self.assertAlmostEqual(pose['z'], tested_pos[2], delta=precision)
+        self.assertAlmostEqual(pose['yaw'], tested_pos[3], delta=precision)
+        self.assertAlmostEqual(pose['pitch'], tested_pos[4], delta=precision)
+        self.assertAlmostEqual(pose['roll'], tested_pos[5], delta=precision)
+
+    def assertAlmostEqualPositionThenFix(self, morse, tested_pos, precision):
+        """
+        Test against a position, presented as an array of 6 double (x,
+        y, z, yaw, pitch, roll). When done, move the robot to this
+        specific position. It allows to reduce the cumulated error
+        between the different part of the test
+        """
+        self.assertAlmostEqualPosition(morse, tested_pos, precision)
+
+        morse.deactivate('robot.motion')
+        morse.activate('robot.teleport')
+        # +0.01  on z to be a bit higher than the ground
+        morse.robot.teleport.publish(
+                {'x': tested_pos[0],
+                 'y': tested_pos[1],
+                 'z': tested_pos[2] + 0.01, 
+                 'yaw': tested_pos[3],
+                 'pitch': tested_pos[4],
+                 'roll': tested_pos[5]})
+        morse.sleep(0.1)
+        morse.deactivate('robot.teleport')
+        morse.activate('robot.motion')
+        morse.sleep(0.1)
 
 
 class MorseBuilderFailureTestCase(MorseTestCase):
@@ -289,7 +362,10 @@ class MorseBuilderFailureTestCase(MorseTestCase):
     def _checkMorseException(self):
         return
 
-def main(*test_cases):
+
+def main(*args, **kwargs):
+    test_cases = args
+    time_modes = kwargs.get('time_modes', [TimeStrategies.BestEffort, TimeStrategies.FixedSimulationStep])
     import sys
     if sys.argv[0].endswith('blender'):
         # If we arrive here from within MORSE, we have probably run
@@ -302,8 +378,14 @@ def main(*test_cases):
     import unittest
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
+    global ALL_TIME_MODES
+    ALL_TIME_MODES = time_modes
+
+    tests = None
+    switch = loader.loadTestsFromTestCase(MorseSwitchTimeMode)
     for test_class in test_cases:
         tests = loader.loadTestsFromTestCase(test_class)
+    for time_mode in time_modes:
+        suite.addTests(switch)
         suite.addTests(tests)
     sys.exit(not MorseTestRunner().run(suite).wasSuccessful())
-

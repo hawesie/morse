@@ -9,6 +9,10 @@ may require some time to master.
 However, you should hopefully be able to get very quickly your first
 simulation running.
 
+If you did not check it, we recommend you to first go over the
+:doc:`Quickstart<quickstart>` page and come back here afterwards.
+
+
 What is the general workflow?
 -----------------------------
 
@@ -28,8 +32,8 @@ you can also use the :doc:`socket interface <user/middlewares/socket>` :tag:`soc
 or the :doc:`Python API <pymorse>` :tag:`pymorse`. MORSE supports the two
 classic interaction mechanism provided by most robotic middlewares:
 
-    1. Using **RPC**-oriented calls :tag:`service`
-    2. Using **stream**-oriented interfaces. :tag:`datastream`
+1. Using **RPC**-oriented calls :tag:`service`
+2. Using **stream**-oriented interfaces. :tag:`datastream`
 
 .. note::
 

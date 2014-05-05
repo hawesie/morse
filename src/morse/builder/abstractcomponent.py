@@ -117,7 +117,6 @@ class AbstractComponent(object):
         obj.parent = self
         self.children.append(obj)
 
-        #TODO: replace by sys._getframes() ??
         import inspect
         try:
             frame = inspect.currentframe()
@@ -132,9 +131,38 @@ class AbstractComponent(object):
                 if component == obj:
                     if not component.basename: # do automatic renaming only if a name is not already manually set
                         component.basename = name
+
         finally:
             del builderscript_frame
             del frame
+
+
+    @staticmethod
+    def close_context(level = 1):
+        import inspect
+        try:
+            frame = inspect.currentframe()
+            builderscript_frame = inspect.getouterframes(frame)[level][0] # parent frame
+            cmpts = builderscript_frame.f_locals
+
+            for name, component in cmpts.items():
+                if isinstance(component, AbstractComponent):
+
+                    if hasattr(component, "parent"):
+                        continue
+
+                    # do automatic renaming only if a name is not already manually set
+                    # component.name accessor set both basename and bpy.name,
+                    # which is the correct behaviour here. The bpy_name may be
+                    # rewritten by _rename_tree, to get the correct hierarchy.
+                    if not component.basename:
+                        Configuration.update_name(component.name, name)
+                        component.name = name
+
+        finally:
+            del builderscript_frame
+            del frame
+
 
     @property
     def name(self):
@@ -208,46 +236,7 @@ class AbstractComponent(object):
             self.properties(my_clock = timer(5.0), my_speed = int(5/2))
 
         """
-        prop = self._bpy_object.game.properties
-        for key in kwargs.keys():
-            if key in prop.keys():
-                self._property_set(key, kwargs[key])
-            else:
-                self._property_new(key, kwargs[key])
-
-    def _property_new(self, name, value, ptype=None):
-        """ Add a new game property for the Blender object
-
-        :param name: property name (string)
-        :param value: property value
-        :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
-                      optional, auto-detect, default=None)
-        """
-        self.select()
-        bpymorse.new_game_property()
-        prop = self._bpy_object.game.properties
-        # select the last property in the list (which is the one we just added)
-        prop[-1].name = name
-        return self._property_set(-1, value, ptype)
-
-    def _property_set(self, pid, value, ptype=None):
-        """ Really set the property for the property referenced by pid
-
-        :param pid: the index of property
-        :param value: the property value
-        :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
-                      optional, auto-detect, default=None)
-        """
-        prop = self._bpy_object.game.properties
-        if ptype == None:
-            # Detect the type (class name upper case)
-            ptype = value.__class__.__name__.upper()
-        if ptype == 'STR':
-            # Blender property string are called 'STRING' (and not 'str' as in Python)
-            ptype = 'STRING'
-        prop[pid].type = ptype
-        prop[pid].value = value
-        return prop[pid]
+        bpymorse.properties(self._bpy_object, **kwargs)
 
     def select(self):
         bpymorse.select_only(self._bpy_object)
@@ -371,7 +360,7 @@ class AbstractComponent(object):
 
                         # iterate over levels to find the one with the default flag
                         for key, value in klass._levels.items():
-                            if value[2] == True:
+                            if value[2]:
                                 level = key
                                 # set the right default level
                                 self.properties(abstraction_level = level)
@@ -497,7 +486,7 @@ class AbstractComponent(object):
         self.properties(abstraction_level = level)
 
     def frequency(self, frequency=None, delay=0):
-        """ Set the frequency delay for the call of the Python module
+        """ Set the frequency of the Python module
 
         :param frequency: (int) Desired frequency,
             0 < frequency < logic tics
@@ -575,18 +564,29 @@ class AbstractComponent(object):
         MORSE_COMPONENTS/``self._category``/``component``.blend/Object/
         or in: MORSE_RESOURCE_PATH/``component``/Object/
 
+        If `component` is not set (neither as argument of `append_meshes` nor
+        through the :py:class:`AbstractComponent` constructor), a Blender
+        `Empty` is created instead.
+
         :param objects: list of the objects names to append
         :param component: component in which the objects are located
         :param prefix: filter the objects names to append (used by PassiveObject)
         :return: list of the imported (selected) Blender objects
         """
-        if not component:
-            component = self._blender_filename
+
+
+        component = component or self._blender_filename
+
+        if not component: # no Blender resource: simply create an empty
+            bpymorse.deselect_all()
+            bpymorse.add_morse_empty()
+            return [bpymorse.get_first_selected_object(),]
+
 
         if component.endswith('.blend'):
             filepath = os.path.abspath(component) # external blend file
         else:
-            filepath = os.path.join(MORSE_COMPONENTS, self._category, \
+            filepath = os.path.join(MORSE_COMPONENTS, self._category,
                                     component + '.blend')
 
         looked_dirs = [filepath]
@@ -639,14 +639,14 @@ class AbstractComponent(object):
         if component.endswith('.dae'):
             filepath = os.path.abspath(component) # external blend file
         else:
-            filepath = os.path.join(MORSE_COMPONENTS, self._category, \
+            filepath = os.path.join(MORSE_COMPONENTS, self._category,
                                     component + '.dae')
 
         if not os.path.exists(filepath):
             logger.error("Collada file %s for external asset import can" \
                          "not be found.\nEither provide an absolute path, or" \
                          "a path relative to MORSE assets directory (typically"\
-                         "$PREFIX/share/morse/data)" % (filepath))
+                         "$PREFIX/share/morse/data)" % filepath)
             return
 
         # Save a list of objects names before importing Collada
@@ -693,7 +693,7 @@ class AbstractComponent(object):
             logger.warning("profile currently supports only sensors (%s)"%self)
         for key in ["profile", "profile_action", "profile_modifiers",
                     "profile_datastreams"]:
-            prop = self._property_new(key, "0")
+            prop = bpymorse._property_new(self._bpy_object, key, "0")
             prop.show_debug = True
         bpymorse.get_context_scene().game_settings.show_debug_properties = True
 

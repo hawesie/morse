@@ -16,6 +16,7 @@ except ImportError:
 import os
 import sys
 import time
+import base64
 import struct
 import zlib
 from pymorse import Morse
@@ -32,33 +33,41 @@ def are_angles_almost_equal(a, b, delta):
     return abs(math.cos(a) - math.cos(b)) <= delta and \
            abs(math.sin(a) - math.sin(b)) <= delta
 
-def wait_yaw(gyroscope_stream, timeout, yaw, precision):
-    timeout_t = time.time() + timeout
-    while time.time() < timeout_t:
+def wait_yaw(gyroscope_stream, morse, timeout, yaw, precision):
+    print("time::now %f" % morse.time())
+    timeout_t = morse.time() + timeout
+    print("wait_yaw %f %f" % (morse.time(), timeout_t))
+    while morse.time() < timeout_t:
+        print("%f %f" % (morse.time(), timeout_t))
         angles = gyroscope_stream.get()
         if are_angles_almost_equal(angles['yaw'], yaw, precision):
             return True
-        time.sleep(.1)
+        morse.sleep(.1)
 
     return False
 
-def rotate_robot_and_wait(orientation_stream, gyroscope_stream, yaw, timeout, \
-                          precision):
+def rotate_robot_and_wait(orientation_stream, gyroscope_stream, morse, \
+                          yaw, timeout, precision):
     send_angles(orientation_stream, yaw, 0.0, 0.0)
     # wait for the robot to be at the desired Z angle (yaw)
-    return wait_yaw(gyroscope_stream, timeout, yaw, precision)
+    return wait_yaw(gyroscope_stream, morse, timeout, yaw, precision)
 
-def flush_camera(camera_stream, timeout):
-    timeout_t = time.time() + timeout
-    while time.time() < timeout_t:
+def flush_camera(camera_stream, morse, timeout):
+    timeout_t = morse.time() + timeout
+    print("flush_camera %f" % timeout_t)
+    while morse.time() < timeout_t:
+        print("%f %f" % (morse.time(), timeout_t))
         # get a new image from the camera stream
         camera_stream.get()
-        time.sleep(.1)
+        morse.sleep(.1)
 
-def rgb2gray8u(image_rgb_data):
+def rgba2gray8u(image_rgba_base64):
     # Grayscale model used for HDTV developed by the ATSC (Wikipedia)
-    return [int(0.2126 * px['r'] + 0.7152 * px['g'] + 0.0722 * px['b']) \
-            for px in image_rgb_data ]
+    image = base64.b64decode( image_rgba_base64 )
+    return [ int(0.2126 * image[index] +
+                 0.7152 * image[index + 1] +
+                 0.0722 * image[index + 2] )
+             for index in range(0, len(image), 4) ]
 
 def load_image(filepath, size):
     image = []
@@ -99,10 +108,12 @@ def read_pgm_ascii(filepath):
     return image8u
 
 def capture8u(cam_stream, image_path=None):
-    # get new image
+    # get new RGBA image
     capture = cam_stream.get()
     # convert it to grayscale
-    image8u = rgb2gray8u(capture['image'])
+    image8u = rgba2gray8u( capture['image'] )
+    # or if we use Video8uPublisher
+    # image8u = base64.b64decode( capture['image'] )
     # save the image (for debug)
     if image_path:
         save_pgm_ascii(image_path, image8u, IMAGE_WIDTH, IMAGE_HEIGHT)
@@ -233,13 +244,13 @@ class CameraTest(MorseTestCase):
 
             # command the robot to rotate and wait that he does for 5 seconds max
             in_time = rotate_robot_and_wait(orientation_stream, \
-                                            gyroscope_stream, 2.70, 5, precision)
+                                            gyroscope_stream, morse, 2.70, 5, precision)
             # XXX robot might have not graphically turned yet! happens randomly!
             # gyroscope can give its new orientation while the physics didnt update yet.
             if DEBUG_PGM:
                 print("debug: rotate in time: %s (False = timeout)"%str(in_time))
             # "flush" the camera stream for 1 second
-            flush_camera(camera_stream, 1.0)
+            flush_camera(camera_stream, morse, 1.0)
 
             # assert robot orienation is correct
             self.assert_orientation(gyroscope_stream, 2.70, 0.0, 0.0, precision)

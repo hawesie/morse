@@ -3,6 +3,8 @@ from abc import ABCMeta
 import time # profiler
 import morse.core.object
 from morse.core.services import service
+from morse.helpers.components import add_data
+from morse.core import blenderapi
 
 class Sensor(morse.core.object.Object):
     """ Basic Class for all sensors
@@ -10,13 +12,20 @@ class Sensor(morse.core.object.Object):
     Inherits from the base object class.
     """
 
+    add_data('timestamp', 0.0, 'float', 
+             'number of milliseconds in simulated time')
+    if logger.isEnabledFor(logging.DEBUG):
+        add_data('simulator_time', 0.0, 'float', 
+                 "number of milliseconds in real world (Only for debug)")
+
+
     # Make this an abstract class
     __metaclass__ = ABCMeta
 
     def __init__ (self, obj, parent=None):
         """ Constructor method. """
         # Call the constructor of the parent class
-        super(Sensor, self).__init__(obj, parent)
+        morse.core.object.Object.__init__(self, obj, parent)
 
         # Define lists of dynamically added functions
         self.output_functions = []
@@ -33,7 +42,7 @@ class Sensor(morse.core.object.Object):
 
     def finalize(self):
         self._active = False
-        super(Sensor, self).finalize()
+        morse.core.object.Object.finalize(self)
         del self.output_functions[:]
         del self.output_modifiers[:]
 
@@ -54,6 +63,10 @@ class Sensor(morse.core.object.Object):
 
         # Update the component's position in the world
         self.position_3d.update(self.bge_object)
+
+        self.local_data['timestamp'] = self.robot_parent.gettime()
+        if logger.isEnabledFor(logging.DEBUG):
+            self.local_data['simulator_time'] = time.time() * 1000.0
 
         # record the time before performing the default action for profiling
         if self.profile:
@@ -102,4 +115,4 @@ class Sensor(morse.core.object.Object):
 
         :return: a dictionary of the current sensor's data
         """
-        return (self.local_data)
+        return self.local_data

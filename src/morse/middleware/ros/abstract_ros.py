@@ -1,6 +1,10 @@
 import logging; logger = logging.getLogger("morse.ros")
 import re
-import roslib; roslib.load_manifest('rospy'); roslib.load_manifest('std_msgs'); roslib.load_manifest('geometry_msgs')
+try:
+    import roslib
+except ImportError as error:
+    logger.error("Could not find ROS. source setup.[ba]sh ?")
+    raise error
 import rospy
 
 from std_msgs.msg import String, Header
@@ -8,6 +12,8 @@ from geometry_msgs.msg import TransformStamped
 
 from morse.middleware.ros.tfMessage import tfMessage
 from morse.middleware import AbstractDatastream
+
+from morse.core.blenderapi import persistantstorage
 
 try:
     import mathutils
@@ -37,9 +43,13 @@ class AbstractROS(AbstractDatastream):
 
     def initialize(self):
         # Initialize MORSE-ROS-node. If already initialized, does nothing
-        rospy.init_node('morse', log_level=rospy.DEBUG, disable_signals=True)
+        name = 'morse'
+        morse_ps = persistantstorage() # dict
+        if 'node_instance' in morse_ps:
+            name = 'morse_%s' % morse_ps.node_instance.node_name
+        rospy.init_node(name, log_level=rospy.DEBUG, disable_signals=True)
 
-        logger.info("ROS datastream initialize %s"%self)
+        logger.info("ROS node %s initialized %s" % (name, self) )
         self.topic = None
 
         if 'topic' in self.kwargs:
@@ -83,11 +93,14 @@ class ROSPublisher(AbstractROS):
 
     def get_ros_header(self):
         header = Header()
-        header.stamp = rospy.Time.now()
+        header.stamp = self.get_time()
         header.seq = self.sequence
         # http://www.ros.org/wiki/geometry/CoordinateFrameConventions#Multi_Robot_Support
         header.frame_id = self.frame_id
         return header
+
+    def get_time(self):
+        return rospy.Time.from_sec(self.data['timestamp'] / 1000.0)
 
     # Generic publish method
     def publish(self, message):
@@ -116,11 +129,11 @@ class ROSPublisherTF(ROSPublisher):
         Return the local position, orientation and scale of this components
         """
         rel_pos = self.component_instance.sensor_to_robot_position_3d()
-        return (rel_pos.translation, rel_pos.rotation)
+        return rel_pos.translation, rel_pos.rotation
 
     def publish_with_robot_transform(self, message):
         self.publish(message)
-        self.send_transform_robot(message.header.stamp)
+        self.send_transform_robot(message.header.stamp, message.header.frame_id)
 
     def send_transform_robot(self, time=None, child=None, parent=None):
         """ Send the transformation relative to the robot
@@ -131,7 +144,7 @@ class ROSPublisherTF(ROSPublisher):
         """
         translation, rotation = self.get_robot_transform()
         if not time:
-            time = rospy.Time.now()
+            time = self.get_time()
         if not child:
             # our frame_id (component frame)
             child = self.frame_id
@@ -171,7 +184,7 @@ class ROSPublisherTF(ROSPublisher):
         self.publish_tf(tfm)
 
 
-class ROSReader(AbstractROS):
+class ROSSubscriber(AbstractROS):
     """ Base class for all ROS Subscribers """
 
     def initialize(self):
@@ -217,7 +230,7 @@ class StringPublisher(ROSPublisher):
         self.publish(repr(self.data))
 
 
-class StringReader(ROSReader):
+class StringReader(ROSSubscriber):
     """ Subscribe to a String topic and log its data decoded as UTF-8. """
     ros_class = String
 

@@ -2,7 +2,6 @@ import logging; logger = logging.getLogger("morse." + __name__)
 from morse.helpers.morse_logging import SECTION, ENDSECTION
 import sys
 import os
-import time
 import imp
 
 # Force the full import of blenderapi so python computes correctly all
@@ -20,6 +19,19 @@ from morse.core.sensor import Sensor
 from morse.core.actuator import Actuator
 from morse.core.modifier import register_modifier
 from morse.helpers.loading import create_instance, create_instance_level
+from morse.core.morse_time import TimeStrategies
+from morse.core.zone import ZoneManager
+
+# Override the default Python exception handler
+sys_excepthook = sys.excepthook
+def morse_excepthook(*args, **kwargs):
+    logger.error("[ERROR][MORSE] Uncaught exception, quit Blender.", exc_info = tuple(args))
+    sys_excepthook(*args, **kwargs)
+    import os
+    os._exit(-1)
+
+# Uncaught exception quit BGE
+sys.excepthook = morse_excepthook
 
 # Constants for stream directions
 IN = 'IN'
@@ -135,15 +147,20 @@ def create_dictionaries ():
     # Create a dictionnary with the overlaid used
     persistantstorage.overlayDict = {}
 
+    # Create a dictionnary for the 'service object', such as supervision
+    persistantstorage.serviceObjectDict = {}
+
     # Create the 'request managers' manager
     persistantstorage.morse_services = MorseServices()
 
+    # Create the zone manager
+    persistantstorage.zone_manager = ZoneManager()
 
     scene = morse.core.blenderapi.scene()
 
     # Store the position and orientation of all objects
     for obj in scene.objects:
-        if obj.parent == None:
+        if obj.parent is None:
             import mathutils
             pos = mathutils.Vector(obj.worldPosition)
             ori = mathutils.Matrix(obj.worldOrientation)
@@ -193,13 +210,17 @@ def create_dictionaries ():
             else:
                 persistantstorage.externalRobotDict[obj] = instance
 
-    if not (persistantstorage.robotDict or \
+    if not (persistantstorage.robotDict or
             persistantstorage.externalRobotDict): # No robot!
         logger.error("INITIALIZATION ERROR: no robot in your simulation!"
                      "Do not forget that components _must_ belong to a"
                      "robot (you can not have free objects)")
         return False
 
+    # Get the zones
+    for obj in scene.objects:
+        if 'Zone_Tag' in obj:
+            persistantstorage.zone_manager.add(obj)
     
     # Get the robot and its instance
     for obj, robot_instance in persistantstorage.robotDict.items():
@@ -338,7 +359,7 @@ def link_datastreams():
         elif isinstance(instance, Actuator):
             direction = IN
         else:
-            assert(False)
+            assert False
 
         persistantstorage.datastreams[component_name] = (direction, 
                                      [d[0] for d in datastream_list])
@@ -361,7 +382,7 @@ def link_datastreams():
 
             if not found:
                 datastream_instance = create_instance(datastream_name)
-                if datastream_instance != None:
+                if datastream_instance is not None:
                     persistantstorage.datastreamDict[datastream_name] = datastream_instance
                     logger.info("\tDatastream interface '%s' created" % datastream_name)
                 else:
@@ -531,8 +552,8 @@ def init_multinode():
     logger.info ("This is node '%s'" % node_name)
     # Create the instance of the node class
 
-    persistantstorage.node_instance = create_instance(classpath, \
-            node_name, server_address, server_port)
+    persistantstorage.node_instance = create_instance(classpath,
+                                                      node_name, server_address, server_port)
 
 def init(contr):
     """ General initialization of MORSE
@@ -553,8 +574,8 @@ def init(contr):
     logger.info ("PID: %d" % os.getpid())
 
     persistantstorage.morse_initialised = False
-    persistantstorage.base_clock = time.clock()
-    persistantstorage.current_time = 0.0
+    persistantstorage.time = TimeStrategies.make(morse.core.blenderapi.getssr()['time_management'])
+    persistantstorage.current_time = persistantstorage.time.time
     # Variable to keep trac of the camera being used
     persistantstorage.current_camera_index = 0
 
@@ -566,6 +587,10 @@ def init(contr):
 
 
     logger.log(SECTION, 'SCENE INITIALIZATION')
+
+    if MULTINODE_SUPPORT:
+        init_multinode()
+
     init_ok = init_ok and link_services()
     init_ok = init_ok and add_modifiers()
     init_ok = init_ok and link_datastreams()
@@ -581,9 +606,6 @@ def init(contr):
         contr = morse.core.blenderapi.controller()
         close_all(contr)
         quit(contr)
-
-    if MULTINODE_SUPPORT:
-        init_multinode()
     
     # Set the default value of the logic tic rate to 60
     #bge.logic.setLogicTicRate(60.0)
@@ -629,57 +651,45 @@ def init_supervision_services():
     :py:mod:`morse.core.supervision_services` 
     """
 
-    ###
-    # First, load and map the socket request manager to the pseudo
-    # 'simulation' component:
+    from morse.services.supervision_services import Supervision
+    from morse.services.communication_services import Communication
+    from morse.services.time_services import TimeServices
+
+    simulation_service = Supervision()
+    communication_service = Communication()
+    time_service= TimeServices()
+
+    persistantstorage.serviceObjectDict[simulation_service.name()] = simulation_service
+    persistantstorage.serviceObjectDict[communication_service.name()] = communication_service
+    persistantstorage.serviceObjectDict[time_service.name()] = time_service
+
+    # For each entries of serviceObjects, register the service as
+    # requested by configuration + socket middleware i/o.
     try:
-        request_manager = "morse.middleware.socket_request_manager.SocketRequestManager"
-        if not persistantstorage.morse_services.add_request_manager(request_manager):
-            return False
-        # The simulation mangement services always uses at least sockets for requests.
-        persistantstorage.morse_services.register_request_manager_mapping(
-                "simulation", request_manager)
-        persistantstorage.morse_services.register_request_manager_mapping(
-                "communication", request_manager)
+        for key, services in persistantstorage.serviceObjectDict.items():
+            request_managers = component_config.component_service.get(key, [])
+            request_managers.append("morse.middleware.socket_request_manager.SocketRequestManager")
 
-    except MorseServiceError as e:
-        #...no request manager :-(
-        logger.critical(str(e))
-        logger.critical("SUPERVISION SERVICES INITIALIZATION FAILED")
-        return False
+            for request_manager in request_managers:
+                try:
+                    # Load required request managers
+                    if not persistantstorage.morse_services.add_request_manager(request_manager):
+                        return False
 
-    ###
-    # Then, load any other middleware request manager that was declared
-    # to also handle the 'simulation' pseudo-component:
-    try:
-        request_managers = component_config.component_service["simulation"]
-
-        for request_manager in request_managers:
-            try:
-                # Load required request managers
-                if not persistantstorage.morse_services.add_request_manager(request_manager):
+                    persistantstorage.morse_services.register_request_manager_mapping(key, request_manager)
+                    logger.info("Adding '%s' to the middlewares for %s "
+                                "control" % (request_manager, key))
+                except MorseServiceError as e:
+                    #...no request manager :-(
+                    logger.critical(str(e))
+                    logger.critical("SUPERVISION SERVICES INITIALIZATION FAILED")
                     return False
 
-                persistantstorage.morse_services.register_request_manager_mapping("simulation", request_manager)
-                logger.info("Adding '%s' to the middlewares for simulation "
-                            "control" % request_manager)
-            except MorseServiceError as e:
-                #...no request manager :-(
-                logger.critical(str(e))
-                logger.critical("SUPERVISION SERVICES INITIALIZATION FAILED")
-                return False
+            services.register_services()
 
-    except (AttributeError, NameError, KeyError): 
+    except (AttributeError, NameError, KeyError):
         # Nothing to declare: skip to the next step.
         pass
-
-
-    ###
-    # Services can be imported *only* after persistantstorage.morse_services
-    # has been created. Else @service won't know where to register the RPC
-    # callbacks.
-    import morse.services.supervision_services
-    import morse.services.communication_services
 
     logger.log(ENDSECTION, "SUPERVISION SERVICES INITIALIZED")
     return True
@@ -692,8 +702,8 @@ def simulation_main(contr):
     """
     # Update the time variable
     try:
-        persistantstorage.current_time = time.clock() - \
-                                         persistantstorage.base_clock
+        persistantstorage.time.update()
+        persistantstorage.current_time = persistantstorage.time.time
     except AttributeError:
         # If the 'base_clock' variable is not defined, there probably was
         #  a problem while doing the init, so we'll abort the simulation.
@@ -702,6 +712,10 @@ def simulation_main(contr):
                         "messages, and report them on the morse-dev@laas.fr "
                         "mailing list.")
         quit(contr)
+
+    if 'serviceObjectDict' in persistantstorage:
+        for ob in persistantstorage.serviceObjectDict.values():
+            ob.action()
 
     if "morse_services" in persistantstorage:
         # let the service managers process their inputs/outputs
@@ -751,6 +765,7 @@ def close_all(contr):
 
     logger.log(ENDSECTION, 'CLOSING REQUEST MANAGERS...')
     del persistantstorage.morse_services
+    del persistantstorage.serviceObjectDict
 
     logger.log(ENDSECTION, 'CLOSING DATASTREAMS...')
     # Force the deletion of the datastream objects

@@ -234,11 +234,11 @@ class LaserSensorWithArc(SensorCreator):
             # Create all the vertices and faces in a layer
             while arc_angle <= end_angle:
                 # Compute the coordinates of the new vertex
-                new_vertex = [ math.cos(math.radians(arc_angle)), \
-                               math.sin(math.radians(arc_angle)), \
+                new_vertex = [ math.cos(math.radians(arc_angle)),
+                               math.sin(math.radians(arc_angle)),
                                math.sin(math.radians(v_angle)) ]
                 verts.append(new_vertex)
-                vertex_index = vertex_index + 1
+                vertex_index += 1
                 # Add the faces after inserting the 2nd vertex
                 if arc_angle > start_angle:
                     faces.append([0, vertex_index-1, vertex_index])
@@ -271,8 +271,8 @@ class LaserSensorWithArc(SensorCreator):
 
 class Hokuyo(LaserSensorWithArc):
     def __init__(self, name=None):
-        LaserSensorWithArc.__init__(self, name, \
-                                    "morse.sensors.laserscanner.LaserScanner",\
+        LaserSensorWithArc.__init__(self, name,
+                                    "morse.sensors.laserscanner.LaserScanner",
                                     "hokuyo")
         mesh = Cylinder("HokuyoCylinder")
         mesh.scale = (.04, .04, .08)
@@ -281,26 +281,26 @@ class Hokuyo(LaserSensorWithArc):
         # set components-specific properties
         self.properties(Visible_arc = False, laser_range = 30.0,
                 scan_window = 270.0, resolution = 0.25)
-        # set the frequency to 10 (6 scan/s for ticrate = 60Hz)
+        # set the frequency to 10 Hz
         self.frequency(10)
 
 class Sick(LaserSensorWithArc):
     def __init__(self, name=None):
-        LaserSensorWithArc.__init__(self, name, \
-                                    "morse.sensors.laserscanner.LaserScanner",\
+        LaserSensorWithArc.__init__(self, name,
+                                    "morse.sensors.laserscanner.LaserScanner",
                                     "sick")
         # set components-specific properties
         self.properties(Visible_arc = False, laser_range = 30.0,
                 scan_window = 180.0, resolution = 1.0)
-        # set the frequency to 10 (6 scan/s for ticrate = 60Hz)
+        # set the frequency to 10 Hz
         self.frequency(10)
         # append sick mesh, from MORSE_COMPONENTS/sensors/sick.blend
         self.append_meshes(['SickMesh'])
 
 class SickLDMRS(LaserSensorWithArc):
     def __init__(self, name=None):
-        LaserSensorWithArc.__init__(self, name, \
-                                    "morse.sensors.laserscanner.LaserScanner",\
+        LaserSensorWithArc.__init__(self, name,
+                                    "morse.sensors.laserscanner.LaserScanner",
                                     "sick-ld-mrs")
         # set components-specific properties
         self.properties(Visible_arc = False, laser_range = 30.0,
@@ -310,12 +310,12 @@ class SickLDMRS(LaserSensorWithArc):
         mesh.scale = (.05, .0825, .044)
         mesh.color(1., 1., .9)
         self.append(mesh)
-        # set the frequency to 10 (6 scan/s for ticrate = 60Hz)
+        # set the frequency to 4 Hz
         self.frequency(4)
 
 class Infrared(LaserSensorWithArc):
     def __init__(self, name=None):
-        LaserSensorWithArc.__init__(self, name, \
+        LaserSensorWithArc.__init__(self, name,
                                     "morse.sensors.laserscanner.LaserScanner")
         mesh = Cube("InfraredCube")
         mesh.scale = (.02, .02, .02)
@@ -324,7 +324,7 @@ class Infrared(LaserSensorWithArc):
         # set components-specific properties
         self.properties(Visible_arc = True, laser_range = 2.0,
                 scan_window = 20.0, resolution = 1.0)
-        # set the frequency to 10 (6 scan/s for ticrate = 60Hz)
+        # set the frequency to 10 Hz
         self.frequency(10)
         # create default Arc_
         self.create_laser_arc()
@@ -338,17 +338,17 @@ class Velocity(SensorCreator):
         self.append(mesh)
 
 class VideoCamera(SensorCreator):
-    def __init__(self, name=None, \
-                 classpath="morse.sensors.video_camera.VideoCamera", \
+    def __init__(self, name=None,
+                 classpath="morse.sensors.video_camera.VideoCamera",
                  filename="video_camera"):
         SensorCreator.__init__(self, name, classpath, filename)
         self.camera = Camera("CameraRobot")
         self.camera.name = "CameraRobot"
         self.append(self.camera)
-        self.properties(cam_width = 256, cam_height = 256, cam_focal = 35.0, \
+        self.properties(cam_width = 256, cam_height = 256, cam_focal = 35.0,
                         capturing = True, Vertical_Flip = True)
-        # set the frequency to 3 (20ips for ticrate = 60Hz)
-        self.frequency(3)
+        # set the frequency to 20 Hz
+        self.frequency(20)
         # add toggle capture action (`Space` key)
         bpymorse.add_sensor(type="KEYBOARD")
         obj = bpymorse.get_context_object()
@@ -371,45 +371,34 @@ class VideoCamera(SensorCreator):
 
 class DepthCamera(VideoCamera):
     def __init__(self, name=None):
-        VideoCamera.__init__(self, name, \
-                             "morse.sensors.depth_camera.DepthCamera",\
+        VideoCamera.__init__(self, name,
+                             "morse.sensors.depth_camera.DepthCamera",
                              "depth_camera")
-        self.properties(cam_width = 128, cam_height = 128, \
-                        cam_near=1.0, cam_far=20.0, retrieve_depth=True,
+        self.properties(cam_near=1.0, cam_far=20.0, retrieve_depth=True,
                         Vertical_Flip=False)
 
-class VelodyneZB(DepthCamera):
+class Velodyne(DepthCamera):
     def __init__(self, name=None):
         DepthCamera.__init__(self, name)
-        # Always (MORSE_LOGIC) - And - Motion (rotation z: 0.017453)
-        morselogic = [sensor for sensor in self._bpy_object.game.sensors \
-                      if sensor.name.startswith('MORSE_LOGIC')]
-        sensor = morselogic[0]
-        bpymorse.add_controller(type='LOGIC_AND')
-        controller = self._bpy_object.game.controllers[-1]
-        # Motion (rotation z: 0.017453)
-        bpymorse.add_actuator(type='MOTION', name='MORSE_ROTATE')
-        actuator = self._bpy_object.game.actuators[-1]
-        actuator.offset_rotation.y = self.camera._bpy_object.data.angle # FOV
-        controller.link(sensor = sensor, actuator = actuator)
-    def set_rotation(self, rotation):
-        """set rotation per tic (in radian, relative to component frequency)"""
-        actuator = self._bpy_object.game.actuators['MORSE_ROTATE']
-        actuator.offset_rotation.y = rotation
+        self.properties(classpath="morse.sensors.depth_camera.DepthCameraRotationZ")
+        self.properties(rotation=self.camera._bpy_object.data.angle)
+
+VelodyneZB = Velodyne # morse 1.1 compatible
 
 class SemanticCamera(VideoCamera):
     def __init__(self, name=None):
-        VideoCamera.__init__(self, name, \
-                             "morse.sensors.semantic_camera.SemanticCamera",\
+        VideoCamera.__init__(self, name,
+                             "morse.sensors.semantic_camera.SemanticCamera",
                              "semantic_camera")
         self.properties(cam_width = 512, cam_height = 512, Vertical_Flip = False)
 
-class Velodyne(LaserSensorWithArc):
+
+class VelodyneRayCast(LaserSensorWithArc):
     def __init__(self, name=None):
-        LaserSensorWithArc.__init__(self, name, \
-                "morse.sensors.laserscanner.LaserScannerRotationZ", "velodyne")
+        LaserSensorWithArc.__init__(self, name,
+                                    "morse.sensors.laserscanner.LaserScannerRotationZ", "velodyne")
         # set components-specific properties
-        self.properties(Visible_arc = True, laser_range = 50.0, \
+        self.properties(Visible_arc = True, laser_range = 50.0,
                         scan_window = 31.500, resolution = 0.5)
         # append velodyne mesh, from MORSE_COMPONENTS/sensors/velodyne.blend
         arc = self.create_laser_arc()
@@ -422,11 +411,12 @@ class Velodyne(LaserSensorWithArc):
 
 class Clock(SensorCreator):
     def __init__(self, name=None):
-        SensorCreator.__init__(self, name, "morse.core.sensor.Sensor", "clock")
+        SensorCreator.__init__(self, name, "morse.sensors.clock.Clock", "clock")
 
 class Kinect(SensorCreator):
     def __init__(self, name="Kinect"):
-        SensorCreator.__init__(self, name, "morse.sensors.kinect.Kinect", "kinect")
+        # meta sensor composed of 2 cameras (rgb and depth)
+        SensorCreator.__init__(self, name, "morse.core.sensor.Sensor", "kinect")
         mesh = Cube("KinectMesh")
         mesh.scale = (.02, .1, .02)
         mesh.color(.8, .8, .8)
@@ -434,18 +424,55 @@ class Kinect(SensorCreator):
         self.video_camera = VideoCamera('rgb')
         self.video_camera.properties(cam_width = 128, cam_height=128)
         self.depth_camera = DepthCamera('depth')
-        #self.depth_camera.properties(Class='DepthVideoCamera')
-        self.depth_camera.properties(cam_width = 128, cam_height=128)
+        self.depth_camera.properties(classpath='morse.sensors.depth_camera.DepthVideoCamera')
+        self.depth_camera.properties(cam_width = 128, cam_height=128, Vertical_Flip=True)
         self.append(self.video_camera)
         self.append(self.depth_camera)
         # TODO find Kinect spec for cameras positions
         self.video_camera.location = (.06, +.08, .04)
         self.depth_camera.location = (.06, -.08, .04)
-    #def add_stream(self, *args, **kwargs):
-    #    # Override AbstractComponent method
-    #    self.video_camera.add_stream(*args, **kwargs)
-    #    self.depth_camera.add_stream(*args, **kwargs)
+    def add_stream(self, *args, **kwargs):
+        # Override AbstractComponent method
+        self.video_camera.add_stream(*args, **kwargs)
+        self.depth_camera.add_stream(*args, **kwargs)
     def profile(self):
         # Override AbstractComponent method
         self.video_camera.profile()
         self.depth_camera.profile()
+    def frequency(self, frequency):
+        # Override AbstractComponent method
+        self.video_camera.frequency(frequency)
+        self.depth_camera.frequency(frequency)
+
+class Collision(SensorCreator):
+    def __init__(self, name=None):
+        """ Sensor to detect objects colliding with the current object,
+        with more settings than the Touch sensor
+        """
+        SensorCreator.__init__(self, name)
+        self.properties(classpath = "morse.sensors.collision.Collision")
+        obj = bpymorse.get_context_object()
+        # Sensor, Collision Sensor, detects static and dynamic objects but
+        # not the other collision sensor objects.
+        obj.game.physics_type = 'SENSOR'
+        # Specify a collision bounds type other than the default
+        obj.game.use_collision_bounds = True
+        # replace Always sensor by Collision sensor
+        sensor = obj.game.sensors[-1]
+        sensor.type = 'COLLISION'
+        # need to get the new Collision Sensor object
+        sensor = obj.game.sensors[-1]
+        sensor.use_pulse_true_level = True # FIXME doesnt seems to have any effect
+        # Component mesh (eye sugar)
+        mesh = Cube("CollisionMesh")
+        mesh.scale = (.02, .02, .02)
+        mesh.color(.8, .2, .1)
+        self.append(mesh)
+    def properties(self, **kwargs):
+        SensorCreator.properties(self, **kwargs)
+        if 'collision_property' in kwargs:
+            try:
+                sensor = self._bpy_object.game.sensors[-1]
+                sensor.property = kwargs['collision_property']
+            except KeyError:
+                pass

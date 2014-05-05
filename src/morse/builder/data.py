@@ -26,19 +26,19 @@ Associate a modifier function to a component.
 """
 import os
 
-MORSE_COMPONENTS = os.path.join(os.getenv('MORSE_ROOT', '/usr/local'), \
+MORSE_COMPONENTS = os.path.join(os.getenv('MORSE_ROOT', '/usr/local'),
                                 'share', 'morse', 'data')
 
-MORSE_RESOURCE_PATH = ':'.join([MORSE_COMPONENTS, \
+MORSE_RESOURCE_PATH = ':'.join([MORSE_COMPONENTS,
                                 os.getenv('MORSE_RESOURCE_PATH', '')])
 
 MORSE_DATASTREAM_MODULE = {
-    'ros': 'morse.middleware.ros_datastream.ROS',
-    'socket': 'morse.middleware.socket_datastream.Socket',
-    'yarp': 'morse.middleware.yarp_datastream.Yarp',
-    'pocolibs': 'morse.middleware.pocolibs_datastream.Pocolibs',
-    'text': 'morse.middleware.text_datastream.Text',
-    'moos': 'morse.middleware.moos_datastream.MOOS'
+    'ros': 'morse.middleware.ros_datastream.ROSDatastreamManager',
+    'socket': 'morse.middleware.socket_datastream.SocketDatastreamManager',
+    'yarp': 'morse.middleware.yarp_datastream.YarpDatastreamManager',
+    'pocolibs': 'morse.middleware.pocolibs_datastream.PocolibsDatastreamManager',
+    'text': 'morse.middleware.text_datastream.TextDatastreamManager',
+    'moos': 'morse.middleware.moos_datastream.MOOSDatastreamManager'
 }
 
 MORSE_MODIFIER_DICT = {
@@ -123,19 +123,30 @@ MORSE_DATASTREAM_DICT = {
             "text": INTERFACE_DEFAULT_OUT,
             }
         },
-    "clock": {
+    "morse.sensors.clock.Clock": {
         "default": {
+            "socket": INTERFACE_DEFAULT_OUT,
+            "yarp": INTERFACE_DEFAULT_OUT,
+            "text": INTERFACE_DEFAULT_OUT,
+            "moos": INTERFACE_DEFAULT_OUT,
             "ros": 'morse.middleware.ros.clock.ClockPublisher',
             }
         },
     "morse.sensors.depth_camera.DepthCamera": {
         "default": {
+            "socket": 'morse.middleware.sockets.depth_camera.DepthCameraPublisher',
             "ros": 'morse.middleware.ros.depth_camera.DepthCameraPublisher',
             'pocolibs': 'morse.middleware.pocolibs.sensors.stereopixel.Spix3DImagePoster'
             }
         },
-    "morse.sensors.gps.GPS": {
+    "morse.sensors.depth_camera.DepthCameraRotationZ": {
         "default": {
+            "ros": 'morse.middleware.ros.depth_camera.DepthCameraPublisher',
+            'pocolibs': 'morse.middleware.pocolibs.sensors.velodyne.Velodyne3DImage'
+            }
+        },
+    "morse.sensors.gps.GPS": {
+        "simple": {
             "ros": 'morse.middleware.ros.gps.NavSatFixPublisher',
             "socket": INTERFACE_DEFAULT_OUT,
             "yarp": INTERFACE_DEFAULT_OUT,
@@ -144,6 +155,18 @@ MORSE_DATASTREAM_DICT = {
             "pocolibs": ['morse.middleware.pocolibs.sensors.pom.PomSensorPoster',
                          'morse.middleware.pocolibs.sensors.pom.PomPoster'],
             "moos": 'morse.middleware.moos.gps.GPSNotifier'
+            },
+        "raw": {
+            "socket": INTERFACE_DEFAULT_OUT,
+            "yarp": INTERFACE_DEFAULT_OUT,
+            "yarp_json": INTERFACE_DEFAULT_OUT,
+            "text": INTERFACE_DEFAULT_OUT,
+            },
+        "extended": {
+            "socket": INTERFACE_DEFAULT_OUT,
+            "yarp": INTERFACE_DEFAULT_OUT,
+            "yarp_json": INTERFACE_DEFAULT_OUT,
+            "text": INTERFACE_DEFAULT_OUT,
             }
         },
     "morse.sensors.gyroscope.Gyroscope": {
@@ -172,11 +195,6 @@ MORSE_DATASTREAM_DICT = {
             "yarp": INTERFACE_DEFAULT_OUT,
             "text": INTERFACE_DEFAULT_OUT,
             "moos": 'morse.middleware.moos.imu.IMUNotifier'
-            }
-        },
-    "morse.sensors.kinect.Kinect": {
-        "default": {
-            "ros": 'morse.middleware.ros.kinect.XYZRGBPublisher',
             }
         },
     "morse.sensors.laserscanner.LaserScanner": {
@@ -283,7 +301,15 @@ MORSE_DATASTREAM_DICT = {
     "morse.sensors.video_camera.VideoCamera": {
         "default": {
             "ros": 'morse.middleware.ros.video_camera.VideoCameraPublisher',
-            "socket": 'morse.middleware.sockets.video_camera.VideoPublisher',
+            "socket": 'morse.middleware.sockets.video_camera.VideoCameraPublisher',
+            "yarp": 'morse.middleware.yarp_datastream.YarpImagePublisher',
+            "pocolibs": 'morse.middleware.pocolibs.sensors.viam.ViamPoster'
+            }
+        },
+    "morse.sensors.depth_camera.DepthVideoCamera": {
+        "default": {
+            "ros": 'morse.middleware.ros.video_camera.VideoCameraPublisher',
+            "socket": 'morse.middleware.sockets.video_camera.VideoCameraPublisher',
             "yarp": 'morse.middleware.yarp_datastream.YarpImagePublisher',
             "pocolibs": 'morse.middleware.pocolibs.sensors.viam.ViamPoster'
             }
@@ -305,6 +331,8 @@ MORSE_DATASTREAM_DICT = {
         },
     "morse.actuators.force_torque.ForceTorque": {
         "default": {
+            "socket": INTERFACE_DEFAULT_IN,
+            "yarp": INTERFACE_DEFAULT_IN,
             "ros": 'morse.middleware.ros.force_torque.WrenchReader',
             }
         },

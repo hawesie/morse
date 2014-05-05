@@ -26,7 +26,7 @@ class Orientation(morse.core.actuator.Actuator):
     def __init__(self, obj, parent=None):
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         self.orientation = self.bge_object.orientation.to_euler('XYZ')
 
@@ -38,16 +38,10 @@ class Orientation(morse.core.actuator.Actuator):
 
     def default_action(self):
         """ Change the parent robot orientation. """
-        # Get the Blender object of the parent robot
-        parent = self.robot_parent.bge_object
 
         # New parent orientation
-        orientation = mathutils.Euler([self.local_data['roll'], \
-                                       self.local_data['pitch'], \
+        orientation = mathutils.Euler([self.local_data['roll'],
+                                       self.local_data['pitch'],
                                        self.local_data['yaw']])
 
-        # Suspend Bullet physics engine, which doesnt like teleport
-        # or instant rotation done by the Orientation actuator (avoid tilt)
-        parent.suspendDynamics()
-        parent.worldOrientation = orientation.to_matrix()
-        parent.restoreDynamics()
+        self.robot_parent.force_pose(None, orientation.to_matrix())

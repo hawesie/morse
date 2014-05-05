@@ -63,15 +63,14 @@ class VideoCamera(morse.sensors.camera.Camera):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(VideoCamera, self).__init__(obj, parent)
+        morse.sensors.camera.Camera.__init__(self, obj, parent)
 
         # Prepare the exportable data of this sensor
         self.local_data['image'] = ''
 
         # Prepare the intrinsic matrix for this camera.
         # Note that the matrix is stored in row major
-        intrinsic = mathutils.Matrix()
-        intrinsic.identity()
+        intrinsic = mathutils.Matrix.Identity(3)
         alpha_u = self.image_width  * \
                   self.image_focal / BLENDER_HORIZONTAL_APERTURE
         intrinsic[0][0] = alpha_u
@@ -93,7 +92,7 @@ class VideoCamera(morse.sensors.camera.Camera):
 
     def interrupt(self):
         self._n = 0
-        super(VideoCamera, self).interrupt()
+        morse.sensors.camera.Camera.interrupt(self)
 
     @async_service
     def capture(self, n):
@@ -112,7 +111,7 @@ class VideoCamera(morse.sensors.camera.Camera):
         if self.bge_object['capturing'] and (self._n != 0) :
 
             # Call the action of the parent class
-            super(self.__class__, self).default_action()
+            morse.sensors.camera.Camera.default_action(self)
 
             # NOTE: Blender returns the image as a binary string
             #  encoded as RGBA
@@ -125,9 +124,9 @@ class VideoCamera(morse.sensors.camera.Camera):
             self.local_data['image'] = image_data
             self.capturing = True
 
-            if (self._n > 0):
+            if self._n > 0:
                 self._n -= 1
-                if (self._n == 0):
+                if self._n == 0:
                     self.completed(status.SUCCESS)
         else:
             self.capturing = False

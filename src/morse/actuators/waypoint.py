@@ -64,8 +64,8 @@ class Waypoint(morse.core.actuator.Actuator):
     add_property('_free_z', False, 'FreeZ', 'bool', "if false "
             "(default), the robot is only controlled on 'X' and heading; if "
             "true, 'Z' is also controlled (for aerial or submarine robots)")
-    add_property('_angle_tolerance', math.radians(10), 'AngleTolerance', \
-                 'float', \
+    add_property('_angle_tolerance', math.radians(10), 'AngleTolerance',
+                 'float',
                  "Tolerance in radian regarding the final heading of the robot")
     add_property('_speed', 1.0, 'Speed', 'float',
                  "movement speed for the robot, given in m/s")
@@ -80,7 +80,7 @@ class Waypoint(morse.core.actuator.Actuator):
             ignored by the obstacle avoidance, and will not make the \
             robot change its trajectory. Useful when trying to move \
             close to an object of a certain kind")
-    add_property('_type', 'Position', 'ControlType', 'string',
+    add_property('_type', 'Velocity', 'ControlType', 'string',
                  "Kind of control, can be one of ['Velocity', 'Position']")
 
     add_data('x', 0.0, "float",
@@ -98,7 +98,7 @@ class Waypoint(morse.core.actuator.Actuator):
 
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         # Direction of the global vectors
         self.world_x_vector = mathutils.Vector([1, 0, 0])
@@ -225,7 +225,7 @@ class Waypoint(morse.core.actuator.Actuator):
         self.local_data['z'] = self.position_3d.z
         self.local_data['speed'] = 0
 
-        super(Waypoint, self).interrupt()
+        morse.core.actuator.Actuator.interrupt(self)
 
     @service
     #@async_service
@@ -350,7 +350,7 @@ class Waypoint(morse.core.actuator.Actuator):
                 dot = projection_vector.dot(self.world_y_vector)
                 logger.debug("Vector dot product = %.2f" % dot)
                 if dot < 0:
-                    target_angle = target_angle * -1
+                    target_angle *= -1
 
                 ### Get the angle that the robot must turn ###
                 if target_angle < robot_angle:
@@ -363,19 +363,27 @@ class Waypoint(morse.core.actuator.Actuator):
                 # Make a correction when the angles change signs
                 if angle_diff > math.pi:
                     angle_diff = (2 * math.pi) - angle_diff
-                    rotation_direction = rotation_direction * -1
+                    rotation_direction *= -1
 
                 logger.debug("Angles: R=%.4f, T=%.4f Diff=%.4f Direction = %d" %
                     (robot_angle, target_angle, angle_diff, rotation_direction))
 
             try:
+                dt = 1 / self.frequency
+                if projection_distance < speed * dt:
+                    v = projection_distance  / dt
+                else:
+                    v = speed
+
+                if abs(angle_diff) < speed * dt:
+                    rotation_speed = angle_diff / dt / 2.0
+                else:
+                    rotation_speed = speed / 2.0
+
                 # Compute the speeds
                 if self._type == 'Position':
-                    v = speed / self.frequency
-                    rotation_speed = (speed / self.frequency) / 2.0
-                elif self._type == 'Velocity':
-                    v = speed
-                    rotation_speed = 1.0 #speed / 2.0
+                    v /= self.frequency
+                    rotation_speed /= self.frequency
             # For the moment ignoring the division by zero
             # It happens apparently when the simulation starts
             except ZeroDivisionError:
@@ -438,4 +446,4 @@ class Waypoint(morse.core.actuator.Actuator):
             logger.debug("Applying vx = %.4f, vz = %.4f, rz = %.4f (v = %.4f)" %
                         (vx, vz, rz, v))
 
-            self.apply_speed(self._type, [vx, 0, vz], [0, 0, rz])
+            self.robot_parent.apply_speed(self._type, [vx, 0, vz], [0, 0, rz])

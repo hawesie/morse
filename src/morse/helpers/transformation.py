@@ -24,18 +24,18 @@ class Transformation3d:
         reference
 
         """
-        self.matrix = mathutils.Matrix(([1, 0, 0, 0], \
-                                        [0, 1, 0, 0], \
-                                        [0, 0, 1, 0], \
+        self.matrix = mathutils.Matrix(([1, 0, 0, 0],
+                                        [0, 1, 0, 0],
+                                        [0, 0, 1, 0],
                                         [0, 0, 0, 1]))
 
         self.euler = mathutils.Euler([0, 0, 0])
-        if obj != None:
+        if obj is not None:
             self.update(obj)
 
         # For use only by robots moving along the Y axis
-        self.correction_matrix = mathutils.Matrix(([0.0, 1.0, 0.0], \
-                                                   [-1.0, 0.0, 0.0], \
+        self.correction_matrix = mathutils.Matrix(([0.0, 1.0, 0.0],
+                                                   [-1.0, 0.0, 0.0],
                                                    [0.0, 0.0, 1.0]))
 
 

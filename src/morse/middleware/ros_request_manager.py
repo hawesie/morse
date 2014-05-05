@@ -15,18 +15,19 @@ except ImportError as ie:
     raise ImportError("Could not import some ROS modules."
                       " Check your ROS configuration is ok. Details:\n" + str(ie))
 
-def ros_timer(callable,frequency):
+def ros_timer(callable_obj, frequency):
     # Shamelessly stolen from actionlib/action_server.py
 
     rate = rospy.Rate(frequency)
 
-    rospy.logdebug("Starting timer");
+    rospy.logdebug("Starting timer")
     while not rospy.is_shutdown():
         try:
             rate.sleep()
-            callable()
+            callable_obj()
         except rospy.exceptions.ROSInterruptException:
-            rospy.logdebug("Sleep interrupted");
+            rospy.logdebug("Sleep interrupted")
+
 
 class RosAction:
     """ Implements a minimal action state machine.
@@ -67,13 +68,13 @@ class RosAction:
 
         # read the frequency with which to publish status from the parameter server
         # (taken from actionlib/action_server.py)
-        self.status_frequency = rospy.get_param(self.name + "/status_frequency", 5.0);
+        self.status_frequency = rospy.get_param(self.name + "/status_frequency", 5.0)
 
-        status_list_timeout = rospy.get_param(self.name + "/status_list_timeout", 5.0);
-        self.status_list_timeout = rospy.Duration(status_list_timeout);
+        status_list_timeout = rospy.get_param(self.name + "/status_list_timeout", 5.0)
+        self.status_list_timeout = rospy.Duration(status_list_timeout)
 
-        self.status_timer = threading.Thread(None, ros_timer, None, (self._publish_status,self.status_frequency) );
-        self.status_timer.start();
+        self.status_timer = threading.Thread(None, ros_timer, None, (self._publish_status,self.status_frequency) )
+        self.status_timer.start()
 
     def setstatus(self, id, status):
 
@@ -100,7 +101,7 @@ class RosAction:
         This is used by RosRequestManager to dispatch the service
         'on completion' event.
         """
-        return self.get_id_from_internal_id(morse_id) != None
+        return self.get_id_from_internal_id(morse_id) is not None
 
     def get_id_from_internal_id(self, morse_id):
 
@@ -196,7 +197,7 @@ class RosAction:
         with self.goal_lock:
             for goal in self._pending_goals.values():
                 if goal['status']:
-                    status_array.status_list.append(goal['status']);
+                    status_array.status_list.append(goal['status'])
 
         status_array.header.stamp = rospy.Time.now()
         self.status_topic.publish(status_array)
@@ -244,25 +245,27 @@ class RosRequestManager(RequestManager):
 
 
     def register_ros_service(self, method, component_name, service_name):
-        
-        # Default service type
-        rostype = MorseAnyService
-        
+
+        rostype = None
         try:
             rostype = method._ros_service_type # Is it a ROS service?
-            logger.debug(component_name + "." + service_name + " is a ROS service of type " + str(rostype))
+            logger.info(component_name + "." + service_name + " is a ROS service of type " + str(rostype))
         except AttributeError:
-            logger.debug(component_name + "." + service_name + " has no ROS-specific service type. Using default one.")
-        
+            logger.info(component_name + "." + service_name + " has no ROS-specific service type. Skipping it.")
+            return False
+
         cb = self.add_ros_handler(component_name, service_name)
 
         # robot.001.sensor.001 = robot001.sensor001
         name = re.sub(r'\.([0-9]+)', r'\1', component_name)
+        _service_name = name.replace(".", "/") + "/" + service_name
 
-        s = rospy.Service(name.replace(".", "/") + "/" + service_name, rostype, cb)
-        logger.debug("Created new ROS service for {}.{}".format(
-                                                    component_name,
-                                                    service_name))
+        try:
+            s = rospy.Service(_service_name, rostype, cb)
+            logger.info("Created new ROS service for %s.%s" % \
+                         (component_name, service_name))
+        except Exception as e:
+            logger.warning("Could not initiate rospy.Service\n" + str(e))
 
         return True
     
@@ -276,7 +279,7 @@ class RosRequestManager(RequestManager):
         
         ROS requires type for the services/actions. Those can be set with the
         :py:meth:`ros_action` and :py:meth:`ros_service` decorators.
-        If none is set, a default type is used (:py:class:`MorseAnyService`).
+        If none is set, the action/service is discarded.
         """
         
         rostype = None
@@ -326,7 +329,7 @@ class RosRequestManager(RequestManager):
                 # Here, we 'hope' that the return value of the MORSE
                 # service is a valid dataset to construct the
                 # ServiceResponse expected by ROS
-                return (result, )
+                return result,
             else:
                 # failure!
                 raise rospy.service.ServiceException(result)
@@ -353,7 +356,7 @@ class RosRequestManager(RequestManager):
                 manager = action
                 break
 
-        if manager == None:
+        if manager is None:
             logger.error("A ROS action call has been lost! Nobody manage request " + request_id)
 
         # Then, dispatch the 'on completion' event.
@@ -362,13 +365,6 @@ class RosRequestManager(RequestManager):
 
     def main(self):
         pass
-
-class MorseAnyService(object):
-    _type = 'morse/AnonymousService'
-    _md5sum = ''
-    _request_class = rospy.msg.AnyMsg
-    _response_class = rospy.msg.AnyMsg
-
 
 def ros_action(fn = None, type = None, name = None):
     """ The @ros_action decorator.

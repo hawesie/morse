@@ -3,6 +3,10 @@ from morse.core import blenderapi
 import morse.core.sensor
 from morse.helpers.components import add_property
 
+def copy_pose(obj_from, obj_to):
+    obj_to.worldPosition = obj_from.worldPosition
+    obj_to.worldOrientation = obj_from.worldOrientation
+
 class Camera(morse.core.sensor.Sensor):
     """
     A generic camera class, which is expected to be used as a base class
@@ -33,6 +37,8 @@ class Camera(morse.core.sensor.Sensor):
     add_property('near_clipping', 0.1, 'cam_near')
     add_property('far_clipping', 100.0, 'cam_far')
     add_property('vertical_flip', False, 'Vertical_Flip')
+    add_property('retrieve_depth', False, 'retrieve_depth')
+    add_property('retrieve_zbuffer', False, 'retrieve_zbuffer')
 
     def __init__(self, obj, parent=None):
         """ Constructor method.
@@ -42,7 +48,7 @@ class Camera(morse.core.sensor.Sensor):
         """
         logger.info("%s initialization" % obj.name)
         # Call the constructor of the parent class
-        super(Camera, self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         # Set the background color of the scene
         self.bg_color = [143, 143, 143, 255]
@@ -50,6 +56,8 @@ class Camera(morse.core.sensor.Sensor):
         self._texture_ok = False
         self._camera_running = False
 
+        self.scene_name = 'S.%dx%d' % (self.image_width, self.image_height)
+        blenderapi.add_scene(self.scene_name, overlay=0)
         logger.info('Component initialized, runs at %.2f Hz', self.frequency)
 
     def default_action(self):
@@ -72,9 +80,21 @@ class Camera(morse.core.sensor.Sensor):
 
 
         if self._camera_running:
+            # Update all objects pose/orientation before to refresh the image
+            self._update_scene()
             # Call the bge.texture method to refresh the image
             blenderapi.cameras()[self.name()].refresh(True)
 
+    def _update_pose(self, obj):
+        copy_pose(self._morse_scene.objects[obj.name], obj)
+
+    def _update_scene(self):
+        for obj in self._scene.objects:
+            if obj.name != '__default__cam__':
+                try:
+                    self._update_pose(obj)
+                except Exception as e:
+                    logger.warning(str(e))
 
     def _setup_video_texture(self):
         """ Prepare this camera to use the bge.texture module.
@@ -108,7 +128,10 @@ class Camera(morse.core.sensor.Sensor):
             return False
 
         # Get the reference to the scene
-        scene = blenderapi.scene()
+        scene_map = blenderapi.get_scene_map()
+        logger.info("Scene %s from %s"% (self.scene_name, repr(scene_map.keys()) ) )
+        self._scene = scene_map[self.scene_name]
+        self._morse_scene = scene_map['S.MORSE_LOGIC']
 
         # Link the objects using bge.texture
         if not blenderapi.hascameras():
@@ -116,7 +139,7 @@ class Camera(morse.core.sensor.Sensor):
 
         mat_id = blenderapi.texture().materialID(screen, material_name)
         vt_camera = blenderapi.texture().Texture(screen, mat_id)
-        vt_camera.source = blenderapi.texture().ImageRender(scene, camera)
+        vt_camera.source = blenderapi.texture().ImageRender(self._scene, camera)
 
         # Set the focal length of the camera using the Game Logic Property
         camera.lens = self.image_focal
@@ -142,16 +165,11 @@ class Camera(morse.core.sensor.Sensor):
 
         try:
             # Use the Z-Buffer as an image texture for the camera
-            if 'retrieve_zbuffer' in self.bge_object:
-                vt_camera.source.zbuff = self.bge_object['retrieve_zbuffer']
-        except AttributeError as detail:
-            logger.warn("%s\nPlease use Blender > 2.65 for Z-Buffer support" %
-                        detail)
-
-        try:
+            if self.retrieve_zbuffer:
+                vt_camera.source.zbuff = True
             # Use the Z-Buffer as input with an array of depths
-            if 'retrieve_depth' in self.bge_object:
-                vt_camera.source.depth = self.bge_object['retrieve_depth']
+            if self.retrieve_depth:
+                vt_camera.source.depth = True
         except AttributeError as detail:
             logger.warn("%s\nPlease use Blender > 2.65 for Z-Buffer support" %
                         detail)

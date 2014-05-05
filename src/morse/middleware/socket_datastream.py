@@ -2,7 +2,8 @@ import logging; logger = logging.getLogger("morse." + __name__)
 import socket
 import select
 import json
-from morse.core.datastream import Datastream
+import errno
+from morse.core.datastream import DatastreamManager
 from morse.helpers.transformation import Transformation3d
 from morse.middleware import AbstractDatastream
 from morse.core import services
@@ -14,14 +15,13 @@ except ImportError:
     # running outside Blender
     mathutils = None
 
-BASE_PORT = 60000
-
 class MorseEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, mathutils.Vector):
             return obj[:]
         if isinstance(obj, mathutils.Matrix):
-            return obj[:][:]
+            # obj[:][:] gives list(mathutils.Vector)
+            return [list(vec) for vec in obj]
         if isinstance(obj, mathutils.Quaternion):
             return {'x' : obj.x, 'y': obj.y, 'z': obj.z, 'w': obj.w }
         if isinstance(obj, mathutils.Euler):
@@ -40,10 +40,10 @@ class SocketServ(AbstractDatastream):
 
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server.bind(('', BASE_PORT))
+        self._server.bind(('', self.kwargs['port']))
         self._server.listen(1)
 
-        logger.info("Socket Mw Server now listening on port " + str(BASE_PORT) + \
+        logger.info("Socket Mw Server now listening on port " + str(self.kwargs['port']) + \
                     " for component " + str(self.component_name) + ".")
 
     def finalize(self):
@@ -54,8 +54,13 @@ class SocketServ(AbstractDatastream):
                 s.close()
 
         if self._server:
-            logger.info("Shutting down connections to server...")
-            self._server.shutdown(socket.SHUT_RDWR)
+            try:
+                logger.info("Shutting down connections to server...")
+                self._server.shutdown(socket.SHUT_RDWR)
+            except socket.error as err_info:
+                # ignore exception raised on OSX for closed sockets
+                if err_info.errno != errno.ENOTCONN:
+                    raise
             logger.info("Closing socket server...")
             self._server.close()
 
@@ -87,7 +92,7 @@ class SocketPublisher(SocketServ):
             sock, _ = self._server.accept()
             self._client_sockets.append(sock)
 
-        if outputready != []:
+        if outputready:
             message = self.encode()
             for o in outputready:
                 try:
@@ -116,7 +121,7 @@ class SocketReader(SocketServ):
             if i == self._server:
                 sock, addr = self._server.accept()
                 logger.debug("New client connected to %s datastream" % self.component_name)
-                if self._client_sockets != []:
+                if self._client_sockets:
                     logger.warning("More than one client trying to write on %s datastream!!" % self.component_name)
                 self._client_sockets.append(sock)
             else:
@@ -148,19 +153,22 @@ class SocketReader(SocketServ):
         return json.loads(msg)
 
 
-class Socket(Datastream):
+class SocketDatastreamManager(DatastreamManager):
     """ External communication using sockets. """
 
     def __init__(self):
         """ Initialize the socket connections """
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__()
+        DatastreamManager.__init__(self)
 
         # port -> MorseSocketServ
         self._server_dict = {}
 
         # component name (string)  -> Port (int)
         self._component_nameservice = {}
+
+        # Base port
+        self._base_port = 60000
 
         # Register two special services in the socket service manager:
 
@@ -198,11 +206,28 @@ class Socket(Datastream):
     def register_component(self, component_name, component_instance, mw_data):
         """ Open the port used to communicate by the specified component.
         """
-        # Create a socket server for this component
-        serv = Datastream.register_component(self, component_name,
-                                         component_instance, mw_data)
+        register_success = False
+        must_inc_base_port = False
 
-        global BASE_PORT
-        self._server_dict[BASE_PORT] = serv
-        self._component_nameservice[component_name] = BASE_PORT
-        BASE_PORT = BASE_PORT + 1
+        if not 'port' in mw_data[2]:
+            must_inc_base_port = True
+            mw_data[2]['port'] = self._base_port
+
+        while not register_success:
+            try:
+                # Create a socket server for this component
+                serv = DatastreamManager.register_component(self, component_name,
+                                                 component_instance, mw_data)
+                register_success = True
+            except socket.error as error_info:
+                if error_info.errno ==  errno.EADDRINUSE:
+                    mw_data[2]['port'] += 1
+                    if must_inc_base_port:
+                        self._base_port += 1
+                else:
+                    raise
+
+        self._server_dict[mw_data[2]['port']] = serv
+        self._component_nameservice[component_name] = mw_data[2]['port']
+        if must_inc_base_port:
+            self._base_port += 1

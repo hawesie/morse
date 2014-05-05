@@ -59,7 +59,7 @@ class PTU(Actuator):
     def __init__(self, obj, parent=None):
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        Actuator.__init__(self, obj, parent)
 
         # Get the references (based on their name) to the childen object and
         # store a transformation3d structure for their position
@@ -218,9 +218,9 @@ class PTU(Actuator):
         target_tilt = normalise_angle(self.local_data['tilt'])
         logger.debug("Targets: pan=%.4f, tilt=%.4f" % (target_pan, target_tilt))
 
-        if (abs(target_pan - self._current_pan) < self._tolerance and \
+        if (abs(target_pan - self._current_pan) < self._tolerance and
             abs(target_tilt - self._current_tilt) < self._tolerance):
-            self.completed((status.SUCCESS))
+            self.completed(status.SUCCESS)
 
         # Determine the direction of the rotation, if any
         ry = rotation_direction(self._current_tilt, target_tilt,

@@ -15,6 +15,7 @@ LAAS-CNRS (Toulouse, France)
 - Cyril Robin
 - Gregoire Milliez
 - Pierrick Koch
+- Matthieu Herrb
 
 TUM (Munich, Germany)
 +++++++++++++++++++++
@@ -65,14 +66,40 @@ DLR (Oberpfaffenhofen, Germany)
 ISAE (Institut Supérieur de l'Aéronautique et de l'Espace) (Toulouse, France) 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+- Arnaud Degroote
 - Charles-Ivan Chesneau
 - Jean-Guillaume Durand
 - Houssam Assany
+
+École Polytechnique Fédérale de Lausanne (Lausanne, Switzerland)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+- Séverin Lemaignan
+
+Bielefeld University (Bielefeld, Germany)
++++++++++++++++++++++++++++++++++++++++++
+
+- Florian Lier
+
+University of Birmingham (Birmingham, England)
+++++++++++++++++++++++++++++++++++++++++++++++
+
+- Chris Burbridge
+
+Boğaziçi University (Istanbul, Turkey)
+++++++++++++++++++++++++++++++++++++++
+
+- Mehmet Murat Sevim
 
 The Debian Project
 ++++++++++++++++++
 
 -  Sylvestre Ledru
+
+InMach GmbH (Ulm, Germany)
+++++++++++++++++++++++++++
+
+- Johannes Horvath
 
 
 Project funding

@@ -8,11 +8,7 @@ import logging; logger = logging.getLogger("morse."+ __name__)
 
 import rospy # to set the parameters
 
-# pr2_controllers_msgs is not catkinized in fuerte
-from morse.middleware.ros.helpers import ros_add_to_syspath
-ros_add_to_syspath("pr2_controllers_msgs")
-
-from pr2_controllers_msgs.msg import *
+from control_msgs.msg import JointTrajectoryAction
 
 class ArmatureController(MorseOverlay):
     """
@@ -26,7 +22,7 @@ class ArmatureController(MorseOverlay):
 
     def __init__(self, overlaid_object, namespace = None):
         # Call the constructor of the parent class
-        super(self.__class__,self).__init__(overlaid_object)
+        MorseOverlay.__init__(self, overlaid_object)
 
         joints = list(overlaid_object.local_data.keys())
 
@@ -48,7 +44,7 @@ class ArmatureController(MorseOverlay):
         if self.namespace:
             return self.namespace
         else:
-            return super(self.__class__, self).name()
+            return MorseOverlay.name(self)
 
     @interruptible
     @ros_action(type = JointTrajectoryAction)
