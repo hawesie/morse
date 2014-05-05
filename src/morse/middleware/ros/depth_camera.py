@@ -27,8 +27,11 @@ class DepthCameraPublisher(ROSPublisherTF):
         pc2.header = self.get_ros_header()
         # 2D structure of the point cloud. If the cloud is unordered, height is
         # 1 and width is the length of the point cloud.
-        pc2.height = 1
-        pc2.width = self.data['nb_points']
+        #pc2.height = 1
+        #pc2.width = self.data['nb_points']
+        pc2.width = 128
+        pc2.height = int(self.data['nb_points'] / pc2.width)
+
         # Describes the channels and their layout in the binary data blob.
         pc2.fields = [PointField('x', 0, PointField.FLOAT32, 1),
                       PointField('y', 4, PointField.FLOAT32, 1),
@@ -36,7 +39,7 @@ class DepthCameraPublisher(ROSPublisherTF):
         pc2.is_dense = True         # True if there are no invalid points
         pc2.is_bigendian = False    # Is this data bigendian?
         pc2.point_step = 12         # Length of a point in bytes
-        pc2.row_step = len(self.data['points']) # Length of a row in bytes
+        pc2.row_step =   pc2.point_step *  pc2.width  #  len(self.data['points'])  Length of a row in bytes
 
         # Actual point data, size is (row_step*height)
         # memoryview from PyMemoryView_FromMemory() implements the buffer interface
