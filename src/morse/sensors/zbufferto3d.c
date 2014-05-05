@@ -1,5 +1,6 @@
 #include <Python.h>
 #include "structmember.h"
+#include <math.h>
 
 // http://docs.python.org/3/extending/newtypes.html
 
@@ -98,7 +99,14 @@ ZBufferTo3D_recover(PyZBufferTo3D* self, PyObject* args)
     {
         z_b = fbuffer[pixel];
         if (z_b >= 1.0)
+          {
+            self->points[i] = nanf("");
+            self->points[i+1] = nanf("");
+            self->points[i+2] = nanf("");
+            i += 3;
             continue; // nothing seen within the far clipping
+          }
+
 
         z_n = 2.0 * z_b - 1.0;
         z_e = 2.0 * self->near * self->far / (self->far + self->near - z_n * (self->far - self->near));
