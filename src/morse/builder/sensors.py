@@ -31,8 +31,10 @@ class Battery(SensorCreator):
         self.properties(DischargingRate = 0.05)
 
 class BatteryStateSensor(SensorCreator):
+    _classpath = "morse.sensors.battery_state.BatteryStateSensor"
+    
     def __init__(self, name=None):
-        SensorCreator.__init__(self, name, "morse.sensors.battery_state.BatteryStateSensor", "battery")
+        SensorCreator.__init__(self, name)
         mesh = Cylinder("BatteryCylinder")
         mesh.scale = (.01, .01, .04)
         mesh.color(.2, .2, .2)
