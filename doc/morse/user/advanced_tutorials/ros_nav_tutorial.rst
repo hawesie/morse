@@ -74,7 +74,7 @@ kitchen environment, a keyboard actuator to move it around, and an
 
     # Set the environment
     env = Environment('tum_kitchen/tum_kitchen')
-    env.aim_camera([1.0470, 0, 0.7854])
+    env.set_camera_rotation([1.0470, 0, 0.7854])
 
 .. note::
 
@@ -280,6 +280,7 @@ Then, we need to add a motion controller to our robot. Open your ``scenario.py``
 .. code-block:: python
 
     motion = MotionXYW()
+    motion.properties(ControlType = 'Position')
     james.append(motion)
     motion.add_interface('ros', topic='/cmd_vel')
 

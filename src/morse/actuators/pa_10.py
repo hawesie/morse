@@ -30,7 +30,7 @@ class PA10(morse.core.actuator.Actuator):
 
     def __init__(self, obj, parent=None):
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         # The axis along which the different segments rotate
         # Considering the rotation of the arm as installed in Jido
@@ -70,7 +70,7 @@ class PA10(morse.core.actuator.Actuator):
     def default_action(self):
         """ Apply rotation to the arm segments """
         # Get the reference to the Sound actuator
-        if self._sound == None:
+        if self._sound is None:
             logger.debug ("ACTIVATING THE SOUND ACTUATOR")
             contr = blenderapi.controller()
             self._sound = contr.actuators['Sound']

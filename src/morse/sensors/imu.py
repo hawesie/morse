@@ -1,7 +1,7 @@
 import logging; logger = logging.getLogger("morse." + __name__)
 import math
 import morse.core.sensor
-from morse.core import mathutils
+from morse.core import mathutils, blenderapi
 from morse.helpers.components import add_data
 
 """
@@ -29,9 +29,9 @@ class IMU(morse.core.sensor.Sensor):
 
     _name = "Inertial measurement unit"
 
-    add_data('angular_velocity', [0.0, 0.0, 0.0], "vec3<float>", \
+    add_data('angular_velocity', [0.0, 0.0, 0.0], "vec3<float>",
              'rates in IMU x, y, z axes (in radian . sec ^ -1)')
-    add_data('linear_acceleration', [0.0, 0.0, 0.0], "vec3<float>", \
+    add_data('linear_acceleration', [0.0, 0.0, 0.0], "vec3<float>",
              'acceleration in IMU x, y, z axes (in m . sec ^ -2)')
 
     def __init__(self, obj, parent=None):
@@ -42,14 +42,14 @@ class IMU(morse.core.sensor.Sensor):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         # The robot needs a physics controller!
         # Since the imu does not have physics,
         self.has_physics = bool(self.robot_parent.bge_object.getPhysicsId())
 
         if not self.has_physics:
-            logger.warning("The robot doesn't have a physics controller," \
+            logger.warning("The robot doesn't have a physics controller,"
                            "falling back to simple IMU sensor.")
 
         if self.has_physics:
@@ -69,10 +69,7 @@ class IMU(morse.core.sensor.Sensor):
         # previous angular velocity
         self.pav = mathutils.Vector((0.0, 0.0, 0.0))
 
-        # get gravity from scene?
-        #g = bpy.data.scenes[0].game_settings.physics_gravity
-        g = 9.81
-        self.gravity = mathutils.Vector((0.0, 0.0, g))
+        self.gravity = - blenderapi.gravity()
 
         # imu2body will transform a vector from imu frame to body frame
         self.imu2body = self.sensor_to_robot_position_3d()
@@ -81,7 +78,7 @@ class IMU(morse.core.sensor.Sensor):
         logger.debug("imu2body rotation RPY [% .3f % .3f % .3f]" % tuple(math.degrees(a) for a in self.imu2body.euler))
         logger.debug("imu2body translation [% .3f % .3f % .3f]" % tuple(self.imu2body.translation))
 
-        if (self.imu2body.translation.length > 0.01):
+        if self.imu2body.translation.length > 0.01:
             self.compute_offset_acceleration = True
         else:
             self.compute_offset_acceleration = False
@@ -118,7 +115,7 @@ class IMU(morse.core.sensor.Sensor):
         self.plv = lin_vel
         self.pav = ang_vel
 
-        return (ang_vel, accel_meas)
+        return ang_vel, accel_meas
 
     def sim_imu_with_physics(self):
         """
@@ -157,7 +154,7 @@ class IMU(morse.core.sensor.Sensor):
         self.plv = self.robot_vel.copy()
         self.pav = self.robot_w.copy()
 
-        return (rates, accel_meas)
+        return rates, accel_meas
 
     def default_action(self):
         """

@@ -17,8 +17,10 @@ if sys.executable.endswith('blender'):
         # typically at 'Builder' stage.
         fake = True
 else:
-    print("ATTENTION: MORSE is running outside Blender! (sys.executable != blender)")
+    print("WARNING: MORSE is running outside Blender! (sys.executable != blender)")
     fake = True
+
+from morse.core import mathutils
 
 UPARROWKEY = None
 DOWNARROWKEY = None
@@ -51,8 +53,11 @@ LEFTMOUSE = None
 RIGHTMOUSE = None
 
 F5KEY = None
+F7KEY = None
 F8KEY = None
 
+CONSTRAINT_TYPE_KINEMATIC = None
+CONSTRAINT_IK_DISTANCE = None
 
 if not fake:
     UPARROWKEY = bge.events.UPARROWKEY
@@ -62,7 +67,7 @@ if not fake:
     LEFTCTRLKEY = bge.events.LEFTCTRLKEY
     LEFTALTKEY = bge.events.LEFTALTKEY
     AKEY = bge.events.AKEY
-    BKEY = bge.events.AKEY
+    BKEY = bge.events.BKEY
     DKEY = bge.events.DKEY
     EKEY = bge.events.EKEY
     FKEY = bge.events.FKEY
@@ -85,7 +90,11 @@ if not fake:
     RIGHTMOUSE = bge.events.RIGHTMOUSE
 
     F8KEY = bge.events.F8KEY
+    F7KEY = bge.events.F7KEY
     F5KEY = bge.events.F5KEY
+
+    CONSTRAINT_TYPE_KINEMATIC = bge.logic.CONSTRAINT_TYPE_KINEMATIC
+    CONSTRAINT_IK_DISTANCE = bge.logic.CONSTRAINT_IK_DISTANCE
 
 def input_active():
     if not fake:
@@ -111,6 +120,11 @@ def input_none():
     else:
         return None
 
+def keyboard():
+    if not fake:
+        return bge.logic.keyboard
+    else:
+        return None
 
 def controller():
     if not fake:
@@ -121,6 +135,24 @@ def controller():
 def scene():
     if not fake:
         return bge.logic.getCurrentScene()
+    else:
+        return None
+
+def add_scene(name, overlay=1):
+    if not fake:
+        return bge.logic.addScene(name, overlay)
+    else:
+        return None
+
+def get_scene_list():
+    if not fake:
+        return bge.logic.getSceneList()
+    else:
+        return None
+
+def get_scene_map():
+    if not fake:
+        return {s.name: s for s in bge.logic.getSceneList()}
     else:
         return None
 
@@ -180,6 +212,12 @@ def materialdata(name):
     else:
         return None
 
+def game_settings():
+    if not fake:
+        return bpy.context.scene.game_settings
+    else:
+        return None
+
 
 def getalwayssensors(obj):
     if not fake:
@@ -213,7 +251,7 @@ def version():
     if not fake:
         return bpy.app.version
     else:
-        return (0,0,0)
+        return 0,0,0
 
 def getssr():
     if not fake:
@@ -221,8 +259,27 @@ def getssr():
     else:
         return None
 
-def isfastmode():
+def joysticks():
     if not fake:
-        return (bge.render.getMaterialMode() == bge.render.KX_TEXFACE_MATERIAL)
+        return bge.logic.joysticks
     else:
-        return False
+        return None
+
+def isfastmode():
+    for area in bpy.context.window.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    return space.viewport_shade == 'WIREFRAME'
+
+def gravity():
+    if not fake:
+        sce = scene()
+        # All supported version of blender do not support it, so well
+        # guess if we don't have the support
+        if hasattr(sce, 'gravity'):
+            return sce.gravity
+        else:
+            return mathutils.Vector((0.0, 0.0, -9.81))
+    else:
+        return None

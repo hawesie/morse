@@ -4,12 +4,21 @@ Adding a new robot
 Let say you have a 3D model of a robot and you want to use it in MORSE, this
 page is what you are looking for. For more on 3D modeling, see `Resources`_.
 
+Since version 1.1, MORSE offers a convenient command-line tool to create and
+setup a new robot.
+
+Assuming you already have an :doc:`initial simulation
+environment<../user/builder>` called ``mysim``, you can create a new robot
+with::
+
+ $ morse add robot <name> mysim
+
 
 Low-poly
 --------
 
 Blender is a 3D modeling software with both Photo-realistic Rendering and
-Game Engine capabilities. In the first case, users want verry detailed models
+Game Engine capabilities. In the first case, users want very detailed models
 with high definition textures. In one word, heavy models. Those are not suited
 for the Game Engine, where we want to get **real-time** rendering.
 
@@ -53,21 +62,22 @@ Builder part
 
 Let say your 3D model is in "``/home/bob/models/wallE.blend``".
 
-The best practice is to set a ``MORSE_RESOURCE_PATH`` environement variable.
-Containing a list of path to models accessible by MORSE, separeted by colon
+The best practice is to set a ``MORSE_RESOURCE_PATH`` environment variable.
+Containing a list of path to models accessible by MORSE, separated by colon
 (``:``)::
 
     export MORSE_RESOURCE_PATH="/home/bob/models:/home/bob/models2012"
 
-Your class must extend :py:class:`morse.builder.morsebuilder.Robot` as:
+Your class must extend :py:class:`morse.builder.morsebuilder.Robot` (or
+:py:class:`morse.builder.morsebuilder.GroundRobot`) as:
 
 .. code-block:: python
 
     from morse.builder import *
 
     class WallE(Robot):
-        def __init__(self):
-            Robot.__init__(self, "wallE.blend")
+        def __init__(self, name = None):
+            Robot.__init__(self, "wallE.blend", name)
 
 
 Advanced
@@ -91,8 +101,8 @@ And back in your builder script, set the classpath with:
     from morse.builder import *
 
     class WallE(Robot):
-        def __init__(self):
-            Robot.__init__(self, "wallE.blend")
+        def __init__(self, name = None):
+            Robot.__init__(self, "wallE.blend", name)
             self.properties(classpath="module.in.pythonpath.WallE")
 
 Where ``module.in.pythonpath.WallE`` is a class extending

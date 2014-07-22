@@ -131,8 +131,8 @@ The new ``default.py`` should look like that:
     robot.add_default_interface('socket')
 
     env = Environment('sandbox', fastmode = False)
-    env.place_camera([10.0, -10.0, 10.0])
-    env.aim_camera([1.05, 0, 0.78])
+    env.set_camera_location([10.0, -10.0, 10.0])
+    env.set_camera_rotation([1.05, 0, 0.78])
 
 Run again this simulation with::
 
@@ -518,7 +518,7 @@ following Python script:
       def __init__(self, obj, parent=None):
           logger.info("%s initialization" % obj.name)
           # Call the constructor of the parent class
-          super(self.__class__, self).__init__(obj, parent)
+          Actuator.__init__(self, obj, parent)
   
           self.left_eye = parent.bge_object.children["left_eye"]
           self.right_eye = parent.bge_object.children["right_eye"]
@@ -564,7 +564,7 @@ The data set by the simulator clients can be later accessed through the
     def __init__(self, obj, parent=None):
           logger.info("%s initialization" % obj.name)
           # Call the constructor of the parent class
-          super(self.__class__, self).__init__(obj, parent)
+          Actuator.__init__(self, obj, parent)
   
           self.left_eye = parent.bge_object.children["left_eye"]
           self.right_eye = parent.bge_object.children["right_eye"]

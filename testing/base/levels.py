@@ -5,7 +5,6 @@ This script tests some of the base functionalities of MORSE.
 
 import sys
 import math
-from time import sleep
 from morse.testing.testing import MorseTestCase
 from pymorse import Morse
 
@@ -55,11 +54,12 @@ class LevelsTest(MorseTestCase):
             raw_odo = morse.robot.raw_odo.get()
             integ_odo = morse.robot.integ_odo.get()
 
-            self.assertEquals(set(['dS']), set(raw_odo.keys()))
-            self.assertEquals(set(['x', 'y', 'z', 'yaw', 'pitch', 'roll',
+            self.assertEquals(set(['timestamp', 'dS']), set(raw_odo.keys()))
+            self.assertEquals(set(['timestamp',
+                                   'x', 'y', 'z', 'yaw', 'pitch', 'roll',
                                    'vx', 'vy', 'vz', 'wz', 'wy', 'wx']),
                               set(integ_odo.keys()))
-            self.assertEquals(set(['dx', 'dy', 'dz', 'dyaw', 'dpitch', 'droll']),
+            self.assertEquals(set(['timestamp', 'dx', 'dy', 'dz', 'dyaw', 'dpitch', 'droll']),
                               set(diff_odo.keys()))
             self.assertEquals(set(integ_odo.keys()), set(odo.keys()))
 

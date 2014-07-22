@@ -9,7 +9,7 @@ It supports Linux, * BSD and Darwin (MacOS X).
 
 #. Install and bootstrap ``robotpkg`` and ``robotpkg-wip`` using these
    instructions: `robotpkg installation <http://robotpkg.openrobots.org>`_ and 
-   `robotpkg-wip installation <http://homepages.laas.fr/mallet/robotpkg-wip>`_
+   `robotpkg-wip installation <http://robotpkg.openrobots.org/robotpkg-wip.html>`_
    (should take less than 5 min)
 #. Add the following environment variables to your system::
     
@@ -28,3 +28,9 @@ It supports Linux, * BSD and Darwin (MacOS X).
 #. The previous package only installs middleware support for text and socket.
    If you want support for additional middlewares, repeat the operation in
    ``$ROBOTPKG/simulation/morse-yarp``, ``$ROBOTPKG/wip/morse-pocolibs``.
+
+.. Note::
+    If you get an error about ``python-sphinx`` you can skip the doc
+    installation by adding ``PKG_OPTIONS.morse += -doc`` to
+    ``$ROBOTPKG_BASE/etc/robotpkg.conf``.
+

@@ -16,10 +16,6 @@ class VideoCamera(morse.sensors.camera.Camera):
     RGBA images.  Images are encoded as binary char arrays, with 4 bytes
     per pixel.
 
-    The cameras make use of Blender's **bge.texture** module, which
-    requires a graphic card capable of GLSL shading.  Also, the 3D view
-    window in Blender must be set to draw **Textured** objects.
-
     Camera calibration matrix
     -------------------------
 
@@ -28,13 +24,13 @@ class VideoCamera(morse.sensors.camera.Camera):
     represents the distance in Blender unit at which the largest image dimension is
     32.0 Blender units, the camera intrinsic calibration matrix is defined as
 
-      +--------------+-------------+---------+
-      | **alpha_u**  |      0      | **u_0** |
-      +--------------+-------------+---------+
-      |       0      | **alpha_v** | **v_0** |
-      +--------------+-------------+---------+
-      |       0      |      0      |    1    |
-      +--------------+-------------+---------+
+    +--------------+-------------+---------+
+    | **alpha_u**  |      0      | **u_0** |
+    +--------------+-------------+---------+
+    |       0      | **alpha_v** | **v_0** |
+    +--------------+-------------+---------+
+    |       0      |      0      |    1    |
+    +--------------+-------------+---------+
 
     where:
 
@@ -43,6 +39,8 @@ class VideoCamera(morse.sensors.camera.Camera):
       the formula)
     - **u_0** = **cam_height** / 2
     - **v_0** = **cam_width** / 2
+
+    See also :doc:`../sensors/camera` for generic informations about Morse cameras.
     """
 
     _name = "Video camera"
@@ -63,15 +61,14 @@ class VideoCamera(morse.sensors.camera.Camera):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(VideoCamera, self).__init__(obj, parent)
+        morse.sensors.camera.Camera.__init__(self, obj, parent)
 
         # Prepare the exportable data of this sensor
         self.local_data['image'] = ''
 
         # Prepare the intrinsic matrix for this camera.
         # Note that the matrix is stored in row major
-        intrinsic = mathutils.Matrix()
-        intrinsic.identity()
+        intrinsic = mathutils.Matrix.Identity(3)
         alpha_u = self.image_width  * \
                   self.image_focal / BLENDER_HORIZONTAL_APERTURE
         intrinsic[0][0] = alpha_u
@@ -93,7 +90,7 @@ class VideoCamera(morse.sensors.camera.Camera):
 
     def interrupt(self):
         self._n = 0
-        super(VideoCamera, self).interrupt()
+        morse.sensors.camera.Camera.interrupt(self)
 
     @async_service
     def capture(self, n):
@@ -112,7 +109,7 @@ class VideoCamera(morse.sensors.camera.Camera):
         if self.bge_object['capturing'] and (self._n != 0) :
 
             # Call the action of the parent class
-            super(self.__class__, self).default_action()
+            morse.sensors.camera.Camera.default_action(self)
 
             # NOTE: Blender returns the image as a binary string
             #  encoded as RGBA
@@ -125,9 +122,9 @@ class VideoCamera(morse.sensors.camera.Camera):
             self.local_data['image'] = image_data
             self.capturing = True
 
-            if (self._n > 0):
+            if self._n > 0:
                 self._n -= 1
-                if (self._n == 0):
+                if self._n == 0:
                     self.completed(status.SUCCESS)
         else:
             self.capturing = False

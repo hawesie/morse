@@ -3,14 +3,23 @@ from morse.core import blenderapi
 import morse.core.sensor
 from morse.helpers.components import add_property
 
+def copy_pose(obj_from, obj_to):
+    obj_to.worldPosition = obj_from.worldPosition
+    obj_to.worldOrientation = obj_from.worldOrientation
+
 class Camera(morse.core.sensor.Sensor):
     """
     A generic camera class, which is expected to be used as a base class
     for real camera. Concrete instantiation are currently:
 
-        - :doc:`video_camera <../sensors/video_camera>`
-        - :doc:`depth_camera <../sensors/depth_camera>`
-        - :doc:`semantic_camera <../sensors/semantic_camera>`
+    - :doc:`video_camera <../sensors/video_camera>`
+    - :doc:`depth_camera <../sensors/depth_camera>`
+    - :doc:`semantic_camera <../sensors/semantic_camera>`
+
+    .. note::
+        The cameras make use of Blender's **bge.texture** module, which
+        requires a graphic card capable of GLSL shading. Also, the 3D view
+        window in Blender must be set to draw **Textured** objects.
 
     .. note::
         The streaming of data from this sensor can be toggled off and on by
@@ -20,6 +29,12 @@ class Camera(morse.core.sensor.Sensor):
         Toggling off the cameras can help make the simulation run faster,
         specially when there are several cameras. However, the lack of
         data on the stream may cause problems to some middlewares.
+
+    .. warning::
+        Contrary to most of objects in Morse, the X axis of the camera
+        is not "in front" of the camera. Here, Morse follows the
+        "standard convention for camera", i.e.  X and Y are in the image
+        plane, and Z is in the depth axis of the camera.
     """
 
     _name = "Generic Camera"
@@ -33,6 +48,8 @@ class Camera(morse.core.sensor.Sensor):
     add_property('near_clipping', 0.1, 'cam_near')
     add_property('far_clipping', 100.0, 'cam_far')
     add_property('vertical_flip', False, 'Vertical_Flip')
+    add_property('retrieve_depth', False, 'retrieve_depth')
+    add_property('retrieve_zbuffer', False, 'retrieve_zbuffer')
 
     def __init__(self, obj, parent=None):
         """ Constructor method.
@@ -42,7 +59,7 @@ class Camera(morse.core.sensor.Sensor):
         """
         logger.info("%s initialization" % obj.name)
         # Call the constructor of the parent class
-        super(Camera, self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         # Set the background color of the scene
         self.bg_color = [143, 143, 143, 255]
@@ -50,6 +67,20 @@ class Camera(morse.core.sensor.Sensor):
         self._texture_ok = False
         self._camera_running = False
 
+        self.scene_name = 'S.%dx%d' % (self.image_width, self.image_height)
+
+        persistantstorage = morse.core.blenderapi.persistantstorage()
+        parent_name = self.robot_parent.name()
+        is_parent_external = False
+
+        for robot in persistantstorage.externalRobotDict.keys():
+            if robot.name == parent_name:
+                is_parent_external = True
+                break
+
+        if not is_parent_external:
+            logger.info("Adding scene %s" % self.scene_name)
+            blenderapi.add_scene(self.scene_name, overlay=0)
         logger.info('Component initialized, runs at %.2f Hz', self.frequency)
 
     def default_action(self):
@@ -72,9 +103,17 @@ class Camera(morse.core.sensor.Sensor):
 
 
         if self._camera_running:
+            # Update all objects pose/orientation before to refresh the image
+            self._update_scene()
             # Call the bge.texture method to refresh the image
             blenderapi.cameras()[self.name()].refresh(True)
 
+    def _update_scene(self):
+        for _to, _from in self._scene_syncable_objects:
+            try:
+                copy_pose(_from, _to)
+            except Exception as e:
+                logger.warning(str(e))
 
     def _setup_video_texture(self):
         """ Prepare this camera to use the bge.texture module.
@@ -108,7 +147,61 @@ class Camera(morse.core.sensor.Sensor):
             return False
 
         # Get the reference to the scene
-        scene = blenderapi.scene()
+        scene_map = blenderapi.get_scene_map()
+        logger.info("Scene %s from %s"% (self.scene_name, repr(scene_map.keys()) ) )
+        self._scene = scene_map[self.scene_name]
+        self._morse_scene = scene_map['S.MORSE_LOGIC']
+
+        """
+        Compute the relation between objects in the current scene and
+        objects in the main logic scene.
+
+        The logic is a bit complex, as in the case of group, we can have
+        objects with the same name (but different ids). So, in this
+        case, we follow the hierarchy on both scene to find
+        correspondance (assuming no recursive group)
+
+        known_ids is used to track objects alreay referenced and not
+        include it twice (and possibly missing the fact that the same
+        name can reference multiples different objects)
+
+        I'm definitively not sure it is correct at all, it is a really
+        really dark corner of Blender :). But it seems to do the job!
+        """
+        self._scene_syncable_objects = []
+        known_ids = set()
+        for obj in self._scene.objects:
+            if obj.name != '__default__cam__' and id(obj) not in known_ids:
+                if blenderapi.version() < (2, 63, 0):
+                    members = None
+                elif blenderapi.version() < (2, 64, 0):
+                    members = obj.group
+                elif blenderapi.version() < (2, 65, 0):
+                    members = obj.group_parent
+                else:
+                    members = obj.groupMembers
+                if not members:
+                    self._scene_syncable_objects.append(
+                            (obj, self._morse_scene.objects[obj.name]))
+                    known_ids.add(id(obj))
+                else:
+                    if blenderapi.version() < (2, 64, 0):
+                        main_members = self._morse_scene.objects[obj.name].group
+                    elif blenderapi.version() < (2, 65, 0):
+                        main_members = self._morse_scene.objects[obj.name].group_parent
+                    else:
+                        main_members = self._morse_scene.objects[obj.name].groupMembers
+                    for i in range(0, len(main_members)):
+                        self._scene_syncable_objects.append(
+                                (members[i], main_members[i]))
+                        known_ids.add(id(members[i]))
+                        childs = members[i].childrenRecursive
+                        main_childs = main_members[i].childrenRecursive
+                        for child in childs:
+                            self._scene_syncable_objects.append(
+                                    (child, main_childs[child.name]))
+                            known_ids.add(id(child))
+
 
         # Link the objects using bge.texture
         if not blenderapi.hascameras():
@@ -116,7 +209,7 @@ class Camera(morse.core.sensor.Sensor):
 
         mat_id = blenderapi.texture().materialID(screen, material_name)
         vt_camera = blenderapi.texture().Texture(screen, mat_id)
-        vt_camera.source = blenderapi.texture().ImageRender(scene, camera)
+        vt_camera.source = blenderapi.texture().ImageRender(self._scene, camera)
 
         # Set the focal length of the camera using the Game Logic Property
         camera.lens = self.image_focal
@@ -142,16 +235,11 @@ class Camera(morse.core.sensor.Sensor):
 
         try:
             # Use the Z-Buffer as an image texture for the camera
-            if 'retrieve_zbuffer' in self.bge_object:
-                vt_camera.source.zbuff = self.bge_object['retrieve_zbuffer']
-        except AttributeError as detail:
-            logger.warn("%s\nPlease use Blender > 2.65 for Z-Buffer support" %
-                        detail)
-
-        try:
+            if self.retrieve_zbuffer:
+                vt_camera.source.zbuff = True
             # Use the Z-Buffer as input with an array of depths
-            if 'retrieve_depth' in self.bge_object:
-                vt_camera.source.depth = self.bge_object['retrieve_depth']
+            if self.retrieve_depth:
+                vt_camera.source.depth = True
         except AttributeError as detail:
             logger.warn("%s\nPlease use Blender > 2.65 for Z-Buffer support" %
                         detail)

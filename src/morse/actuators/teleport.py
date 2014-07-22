@@ -3,6 +3,7 @@ import morse.core.actuator
 from morse.core.services import service
 from morse.core import mathutils
 from morse.helpers.components import add_data
+from morse.helpers.transformation import Transformation3d
 
 class Teleport(morse.core.actuator.Actuator):
     """ 
@@ -35,17 +36,18 @@ class Teleport(morse.core.actuator.Actuator):
     def __init__(self, obj, parent=None):
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
-        orientation = self.bge_object.worldOrientation.to_euler('XYZ')
-        position = self.bge_object.worldPosition
+        pose3d = self.position_3d
 
-        self.local_data['x'] = position.x
-        self.local_data['y'] = position.y
-        self.local_data['z'] = position.z
-        self.local_data['roll'] = orientation.x
-        self.local_data['pitch'] = orientation.y
-        self.local_data['yaw'] = orientation.z
+        self.local_data['x'] = pose3d.x
+        self.local_data['y'] = pose3d.y
+        self.local_data['z'] = pose3d.z
+        self.local_data['roll'] = pose3d.roll
+        self.local_data['pitch'] = pose3d.pitch
+        self.local_data['yaw'] = pose3d.yaw
+
+        self.actuator2robot = self.position_3d.transformation3d_with(self.robot_parent.position_3d)
 
         logger.info('Component initialized')
 
@@ -82,22 +84,21 @@ class Teleport(morse.core.actuator.Actuator):
 
     def default_action(self):
         """ Change the parent robot pose. """
-        # Get the Blender object of the parent robot
-        parent = self.robot_parent.bge_object
 
         # New parent position
-        position = mathutils.Vector((self.local_data['x'], \
-                                     self.local_data['y'], \
+        position = mathutils.Vector((self.local_data['x'],
+                                     self.local_data['y'],
                                      self.local_data['z']))
 
         # New parent orientation
-        orientation = mathutils.Euler([self.local_data['roll'], \
-                                       self.local_data['pitch'], \
+        orientation = mathutils.Euler([self.local_data['roll'],
+                                       self.local_data['pitch'],
                                        self.local_data['yaw']])
 
-        # Suspend Bullet physics engine, which doesnt like teleport
-        # or instant rotation done by the Orientation actuator (avoid tilt)
-        parent.suspendDynamics()
-        parent.worldPosition = position
-        parent.worldOrientation = orientation.to_matrix()
-        parent.restoreDynamics()
+        world2actuator = Transformation3d(None)
+        world2actuator.translation = position
+        world2actuator.rotation = orientation
+
+        (loc, rot, _) = (world2actuator.matrix * self.actuator2robot.matrix).decompose()
+
+        self.robot_parent.force_pose(loc, rot)

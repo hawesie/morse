@@ -1,7 +1,10 @@
 import logging; logger = logging.getLogger("morsebuilder." + __name__)
 import sys
 import math
-from morse.builder.abstractcomponent import *
+from morse.builder.blenderobjects import Cube
+from morse.builder import bpymorse
+from morse.builder.abstractcomponent import AbstractComponent
+from morse.core.exceptions import *
 
 """
 Morse Builder API
@@ -20,15 +23,15 @@ The string passed to the differents Components Classes must be an existing
 in the folder ``MORSE_COMPONENTS/robots/``.
 """
 
-def morse_excepthook(etype, evalue, etraceback):
-    logger.error("[ERROR][MORSE] Your builder script is invalid!")
-    import traceback
-    traceback.print_tb(etraceback)
-    logger.error("\n")
-    logger.error(str(evalue))
+# Override the default Python exception handler
+sys_excepthook = sys.excepthook
+def morse_excepthook(*args, **kwargs):
+    logger.error("[ERROR][MORSE] Uncaught exception, quit Blender.", exc_info = tuple(args))
+    sys_excepthook(*args, **kwargs)
     import os
     os._exit(-1)
-# unhandled exception quit Blender
+
+# Uncaught exception quit Blender
 sys.excepthook = morse_excepthook
 
 class PassiveObject(AbstractComponent):
@@ -53,7 +56,7 @@ class PassiveObject(AbstractComponent):
         """
         AbstractComponent.__init__(self, filename=filename)
 
-        logger.info("Importing the following passive object(s): %s" % (prefix))
+        logger.info("Importing the following passive object(s): %s" % prefix)
 
         imported_objects = self.append_meshes(prefix=prefix)
         # Here we use the fact that after appending, Blender select the objects
@@ -91,6 +94,24 @@ class PassiveObject(AbstractComponent):
             contr = obj.game.controllers[-1]
             contr.link(sensor = sens)
 
+class Zone(Cube):
+    def __init__(self, type):
+        Cube.__init__(self, 'xxx')
+        # Need to create a new material before calling make_transparent
+        self._bpy_object.active_material = bpymorse.create_new_material()
+        self._make_transparent(self._bpy_object, 1e-6)
+        self.properties(Zone_Tag = True, Type = type)
+
+    @property
+    def size(self):
+        return self._bpy_object.scale
+    @size.setter
+    def size(self, value):
+        self._bpy_object.scale = value
+
+    def rotate(self, x=0.0, y=0.0, z=0.0):
+        logger.warning("rotate is not supported for Zone")
+
 class Component(AbstractComponent):
     """ Append a morse-component to the scene
 
@@ -118,26 +139,22 @@ class Component(AbstractComponent):
             self.morseable()
 
 
-class Armature(AbstractComponent):
-    def __init__(self, objectname, filename='armature'):
-        """ Initialize an Armature
-
-        :param objectname: Armature name
-        :param filename: for datastream configuration, default 'armature'
-        """
-        AbstractComponent.__init__(self, filename=filename, category='actuators')
-        self.set_blender_object(bpymorse.get_object(objectname))
-        # default classpath for Armature (can be modified)
-        if not self.is_morseable():
-            self.morseable()
-        self.properties(classpath="morse.actuators.armature.Armature")
-
-
 class Robot(Component):
-    def __init__(self, filename):
+    def __init__(self, filename = '', name = None):
         Component.__init__(self, 'robots', filename)
         self.properties(Robot_Tag = True)
         self.default_interface = None
+        if name:
+            self.name = name
+
+    def set_friction(self, friction=0.0):
+        """ Set  Coulomb friction coefficient
+
+        :param friction: [0, 100], default 0.0
+        :type  friction: float
+        """
+        for slot in self._bpy_object.material_slots: # ['TireMat']
+            slot.material.physics.friction = friction
 
     def set_mass(self, mass):
         """ Set component's mass
@@ -177,55 +194,75 @@ class Robot(Component):
         """
         self._make_transparent(self._bpy_object, alpha)
 
-class WheeledRobot(Robot):
-    def __init__(self, filename):
-        Robot.__init__(self, filename)
+    def set_rigid_body(self):
+        """ Configure this robot to use rigid_body physics """
+        self._bpy_object.game.use_actor = True
+        self._bpy_object.game.physics_type = 'RIGID_BODY'
+        self._bpy_object.game.use_sleep = True
+
+    def set_no_collision(self):
+        """ Configure this robot to not use physics at all """
+        self._bpy_object.game.physics_type = 'NO_COLLISION'
+
+    def set_dynamic(self):
+        self._bpy_object.game.physics_type = 'DYNAMIC'
+        self._bpy_object.game.use_actor = True
+        self._bpy_object.game.use_sleep = True
+
+    def set_collision_bounds(self):
+        self._bpy_object.game.use_collision_bounds = True
+        self._bpy_object.game.collision_bounds_type = 'CONVEX_HULL'
+        self._bpy_object.game.use_collision_compound = True
+
+class GroundRobot(Robot):
+    def __init__(self, filename, name):
+        Robot.__init__(self, filename, name)
+        self.properties(GroundRobot = True)
+
+class WheeledRobot(GroundRobot):
+    def __init__(self, filename, name):
+        Robot.__init__(self, filename, name)
 
     def unparent_wheels(self):
         """ Make the wheels orphans, but keep the transformation applied to
             the parent robot """
         # Force Blender to update the transformation matrices of objects
         bpymorse.get_context_scene().update()
+
         wheels = [child for child in self._bpy_object.children if \
                   "wheel" in child.name.lower()]
-        import mathutils
+        wnames = ['None'] * 5
+        keys = ['WheelFLName', 'WheelFRName', 'WheelRLName',
+                'WheelRRName', 'CasterWheelName']
+        properties = bpymorse.get_properties(self._bpy_object)
+        for i in range(5):
+            key = keys[i]
+            expected_wheel = properties.get(key, None)
+            if expected_wheel:
+                for wheel in wheels:
+                    if wheel.name.startswith(expected_wheel):
+                        wnames[i] = wheel.name
+
+        self.properties(WheelFLName = wnames[0], WheelFRName = wnames[1],
+                        WheelRLName = wnames[2], WheelRRName = wnames[3],
+                        CasterWheelName = wnames[4])
         for wheel in wheels:
             # Make a copy of the current transformation matrix
-            transformation = mathutils.Matrix(wheel.matrix_world)
+            transformation = wheel.matrix_world.copy()
             wheel.parent = None
             wheel.matrix_world = transformation
             # This method should be easier, but does not seem to work
             #  because of an incorrect context error
             #bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
 
-    def append(self, obj):
-        """ Add a child to the current object
-
-        Overloads :py:meth:`morse.builder.abstractcomponent.AbstractComponent.append`
-        *e.g.*, ``robot.append(sensor)`` will set the robot parent of the sensor.
-        """
-        # Correct the rotation of the object
-        old = obj._bpy_object.rotation_euler
-        obj._bpy_object.rotation_euler = (old[0], old[1], old[2]+math.pi/2)
-
-        # Switch the values of X and Y location
-        tmp_x = obj._bpy_object.location[0]
-        obj._bpy_object.location[0] = -obj._bpy_object.location[1]
-        obj._bpy_object.location[1] = tmp_x
-
-        Robot.append(self, obj, 2)
-
     def after_renaming(self):
         self.unparent_wheels()
+        for obj in self.children:
+            old = obj._bpy_object.rotation_euler
+            obj._bpy_object.rotation_euler = (old[0], old[1], old[2]+math.pi/2)
 
+            # Switch the values of X and Y location
+            tmp_x = obj._bpy_object.location[0]
+            obj._bpy_object.location[0] = -obj._bpy_object.location[1]
+            obj._bpy_object.location[1] = tmp_x
 
-
-class Sensor(Component):
-    def __init__(self, filename):
-        Component.__init__(self, 'sensors', filename)
-        self.properties(Component_Tag = True)
-
-class Actuator(Component):
-    def __init__(self, filename):
-        Component.__init__(self, 'actuators', filename)
-        self.properties(Component_Tag = True)

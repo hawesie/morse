@@ -29,22 +29,34 @@ class Light(morse.core.actuator.Actuator):
     def __init__(self, obj, parent=None):
         logger.info("%s initialization" % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         # get the light which is a child of the Empty object
         self.light = self.bge_object.children[0] 
         
         self.local_data['emit'] = self._emit
+        self._last = not self.local_data['emit']
 
         logger.info('Component initialized')
 
     def default_action(self):
         """ Switch on/off the light. """
+        # if no changes, return
+        if self._last == self.local_data['emit']:
+            return
 
         if self.local_data['emit']:
             self.light.energy = self._energy
         else:
             self.light.energy = 0.0
+
+        # for each camera's scene: update the light
+        for scene in blenderapi.get_scene_list():
+            if scene.name not in ['S.MORSE_ENV', 'S.MORSE_LOGIC'] and \
+                    self.light.name in scene.objects:
+                scene.objects[self.light.name].energy = self.light.energy
+
+        self._last = self.local_data['emit']
 
     @service
     def toggle(self, emit=None):

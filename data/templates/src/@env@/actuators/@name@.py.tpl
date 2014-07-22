@@ -7,6 +7,9 @@ from morse.core import status
 from morse.helpers.components import add_data, add_property
 
 class @classname@(morse.core.actuator.Actuator):
+    """Write here the general documentation of your actuator.
+    It will appear in the generated online documentation.
+    """
     _name = "@classname@"
     _short_desc = "@shortdesc@"
 
@@ -17,7 +20,7 @@ class @classname@(morse.core.actuator.Actuator):
     def __init__(self, obj, parent=None):
         logger.info("%s initialization" % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         # Do here actuator specific initializations
 

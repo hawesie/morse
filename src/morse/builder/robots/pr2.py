@@ -4,13 +4,13 @@ from morse.builder import *
 from morse.builder.sensors import *
 from morse.builder.actuators import *
 
-class BarePR2(Robot):
+class BarePR2(GroundRobot):
     """
     A PR2 model, without any sensor or actuator.
     """
-    def __init__(self):
-        Robot.__init__(self, 'pr2')
-        self.properties(classpath = "morse.robots.pr2.PR2", \
+    def __init__(self, name = None):
+        GroundRobot.__init__(self, 'pr2', name)
+        self.properties(classpath = "morse.robots.pr2.PR2",
                         COLOR = "0.0, 0.0, 1.0")
 
     def set_color(self, color = (0.0, 0.0, 0.8)):
@@ -28,34 +28,34 @@ class BasePR2(BarePR2):
     whole joint state of the robot.
 
     """
-    def __init__(self):
-        BarePR2.__init__(self)
+    def __init__(self, name = None):
+        BarePR2.__init__(self, name)
 
         # Armatures and armature pose sensors
         # The armatures are already present in the PR2 blender model.
 
          # torso
-        self.torso = Armature("torso_armature")
+        self.torso = Armature(armature_name = "torso_armature")
         self.torso_pose = ArmaturePose()
         self.torso_pose.name = "pose"
         self.torso.append(self.torso_pose)
         self.append(self.torso)
 
         # head
-        self.head = Armature("head_armature")
+        self.head = Armature(armature_name = "head_armature")
         self.head_pose = ArmaturePose()
         self.head_pose.name = "pose"
         self.head.append(self.head_pose)
         self.torso.append(self.head)
 
         # arms
-        self.l_arm = Armature("l_arm_armature")
+        self.l_arm = Armature(armature_name = "l_arm_armature")
         self.l_arm_pose = ArmaturePose()
         self.l_arm_pose.name = "pose"
         self.l_arm.append(self.l_arm_pose)
         self.torso.append(self.l_arm)
 
-        self.r_arm = Armature("r_arm_armature")
+        self.r_arm = Armature(armature_name = "r_arm_armature")
         self.r_arm_pose = ArmaturePose()
         self.r_arm_pose.name = "pose"
         self.r_arm.append(self.r_arm_pose)
@@ -116,8 +116,8 @@ class BasePR2(BarePR2):
 
 
 class LocalizedPR2(BasePR2):
-    def __init__(self, with_keyboard = True, show_laser = False):
-        BasePR2.__init__(self)
+    def __init__(self, name = None, with_keyboard = True, show_laser = False):
+        BasePR2.__init__(self, name)
 
         ###################################
         # Actuators
@@ -126,6 +126,7 @@ class LocalizedPR2(BasePR2):
 
         # Motion controller
         self.motion = MotionXYW()
+        self.motion.properties(ControlType = 'Position')
         self.append(self.motion)
 
         # (optionally) keyboard controller
@@ -142,7 +143,7 @@ class LocalizedPR2(BasePR2):
 
     def add_interface(self, interface):
 
-        super(self.__class__, self).add_interface(interface)
+        BasePR2.add_interface(self, interface)
 
         if interface == "ros": 
             self.motion.add_stream("ros", topic="/cmd_vel")
@@ -154,8 +155,8 @@ class NavPR2(BasePR2):
     A PR2 equipped with sensors and actuators required for 2D navigation.
 
     """
-    def __init__(self, with_keyboard = True, show_laser = False):
-        BasePR2.__init__(self)
+    def __init__(self, name = None, with_keyboard = True, show_laser = False):
+        BasePR2.__init__(self, name)
 
         ###################################
         # Actuators
@@ -164,6 +165,7 @@ class NavPR2(BasePR2):
 
         # Motion controller
         self.motion = MotionXYW()
+        self.motion.properties(ControlType = 'Position')
         self.append(self.motion)
 
         # (optionally) keyboard controller
@@ -198,7 +200,7 @@ class NavPR2(BasePR2):
 
     def add_interface(self, interface):
 
-        super(self.__class__, self).add_interface(interface)
+        BasePR2.add_interface(self, interface)
 
         if interface == "socket":
             pass

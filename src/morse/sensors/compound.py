@@ -14,6 +14,8 @@ class CompoundSensor(morse.core.sensor.Sensor):
 
     Note that services exposed by original sensors *are not* exposed by the
     compound sensor.
+
+    :noautoexample:
     """
     _name = "Compound Sensor"
     _short_desc = "Special sensor that merges other sensors' outputs"
@@ -34,13 +36,13 @@ class CompoundSensor(morse.core.sensor.Sensor):
         """
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__,self).__init__(obj, parent)
+        morse.core.sensor.Sensor.__init__(self, obj, parent)
 
         if not self.sensors:
             logger.error("The compound sensor <%s> has no sensors list associated!" % obj.name)
             return
 
-        self.local_data = {}
+        self._initialized = False
 
     def _get_sensors_references(self):
         # Get the reference to all components
@@ -63,5 +65,6 @@ class CompoundSensor(morse.core.sensor.Sensor):
         Default action does nothing at all, since self.local_data stores
         references to sub sensors' local_data, so it get updated for free.
         """
-        if not self.local_data:
+        if not self._initialized:
             self._get_sensors_references()
+            self._initialized = True

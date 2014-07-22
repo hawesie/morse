@@ -63,7 +63,6 @@ background its pose:
 
 .. code-block:: python
 
-    import time
     import pymorse
 
     def print_pos(pose):
@@ -80,13 +79,19 @@ background its pose:
                                   'speed' : 1.0})
 
         # Leave a couple of millisec to the simulator to start the action
-        time.sleep(0.1)
+        simu.sleep(0.1)
 
         # waits until we reach the target
         while simu.r2d2.motion.get_status() != "Arrived":
-            time.sleep(0.5)
+            simu.sleep(0.5)
 
         print("Here we are!")
+
+.. note::
+
+    Note that here we use ``pymorse.Morse.sleep()`` instead of standard
+    ``time.sleep``, the former allowing to consider the simulation time
+    while the second use 'system' time.
 
 
 Data stream manipulation
@@ -114,7 +119,6 @@ These methods are demonstrated in the example below:
 
 .. code-block:: python
 
-    import time
     import pymorse
 
     def printer(data):
@@ -133,7 +137,7 @@ These methods are demonstrated in the example below:
             pose.subscribe(printer)
 
             # Read for 10 sec
-            time.sleep(10)
+            simu.sleep(10)
 
         except pymorse.MorseServerError as mse:
             print('Oups! An error occured!')
@@ -176,7 +180,6 @@ below:
 
 .. code-block:: python
 
-    import time
     import pymorse
 
     def done(evt):
@@ -194,7 +197,7 @@ below:
         print("Am I currently moving? %s" % goto_action.running())
 
         while goto_action.running():
-            time.sleep(0.5)
+            simu.sleep(0.5)
 
 Use the `cancel` method on the `future` returned by the RPC call to
 abort the service.
@@ -289,22 +292,17 @@ configure it to print debug messages on the console.
             print(mse)
 """
 import json
-import time
-import socket
 import logging
 import asyncore
-import asynchat
 import threading
-# Double-ended queue, thread-safe append/pop.
-from collections import deque
 
 from .future import MorseExecutor
+from .stream import Stream, StreamJSON
 
 logger = logging.getLogger("pymorse")
 logger.setLevel(logging.WARNING)
 # logger.addHandler( logging.NullHandler() )
 
-MSG_SEPARATOR=b"\n"
 TIMEOUT=8
 BUFFER_SIZE=8192
 SUCCESS='SUCCESS'
@@ -498,6 +496,11 @@ class Morse(object):
 
         name = fqn.split('.')[1:] # the first token is always the robot name. Remove it
 
+        if not name:
+            logger.error("Component <%s> of robot <%s> has an invalid name! " \
+                         "Please report this bug on morse-users@laas.fr" % (fqn, robot.name))
+            return
+
         logger.debug("Component %s" % str((name[-1], fqn, stream, port, services)) )
         cmpt = Component(self, name[-1], fqn, stream, port, services)
 
@@ -536,28 +539,30 @@ class Morse(object):
             'id': '%i'%self.simulator_service_id,
             'component': component,
             'service': service,
-            'args': ', '.join(json.dumps(arg) for arg in args),
+            'args': json.dumps(args),
         }
         self.simulator_service_id += 1
         return req
 
     def _rpc_process(self, req, timeout=None):
-        raw = "{id} {component} {service} [{args}]".format(**req)
+        raw = "{id} {component} {service} {args}".format(**req)
         logger.debug(raw)
         response_callback = ResponseCallback(req['id'])
         self.simulator_service.subscribe(response_callback.callback)
         try:
-            self.simulator_service.publish(raw)
             with response_callback.condition:
-                if self.is_up() and response_callback.condition.wait(timeout):
+                self.simulator_service.publish(raw)
+                # if self.is_up() and response_callback.condition.wait(timeout):
+                # XXX Python 3.2.2 is_up() returns False when connecting...
+                if response_callback.condition.wait(timeout):
                     return rpc_get_result(response_callback.response)
         finally:
             self.simulator_service.unsubscribe(response_callback.callback)
 
         if not self.is_up():
-            raise ConnectionError("simulation service is down")
+            raise RuntimeError("simulation service is down")
 
-        raise TimeoutError("timeout exceeded while waiting for response")
+        raise RuntimeError("timeout exceeded while waiting for response")
 
     def cancel(self, service_id):
         """ Send a cancelation request for an existing (running) service.
@@ -594,7 +599,7 @@ class Morse(object):
         self.close()
 
     def reset(self):
-       return self.rpc("simulation", "reset")
+       return self.rpc("simulation", "reset_objects")
 
     def streams(self):
        return self.rpc("simulation", "list_streams")
@@ -608,6 +613,22 @@ class Morse(object):
     def deactivate(self, cmpnt):
         return self.rpc("simulation", "deactivate", cmpnt)
 
+    def sleep(self, time):
+        """ Wait for time second.
+
+        Time may be a float. Contrary to ``time.sleep``, this method
+        consider the simulated time.
+        """
+        return self.rpc("time", "sleep", time)
+
+    def time(self):
+        """ Return the simulated time, in seconds, since Epoch
+
+        The precision of the value depends on the underlying python
+        precision of time, and the frequency of simulator
+        """
+        return self.rpc("time", "now")
+
     #### with statement ####
     def __enter__(self):
         return self
@@ -618,165 +639,3 @@ class Morse(object):
         else:
             self.close(True)
             return False # re-raise exception
-
-class Stream(asynchat.async_chat):
-    """ Asynchrone I/O stream handler
-
-    To start the handler, just run :meth asyncore.loop: in a new thread::
-
-    threading.Thread( target = asyncore.loop, kwargs = {'timeout': .1} ).start()
-
-    where timeout is used with select.select / select.poll.poll.
-    """
-    def __init__(self, host, port, maxlen=100):
-        self.error = False
-        asynchat.async_chat.__init__(self)
-        self.set_terminator(MSG_SEPARATOR)
-        self.create_socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
-        self.connect( (host, port) )
-        self._in_buffer  = b""
-        self._in_queue   = deque([], maxlen)
-        self._callbacks  = []
-        self._cv_new_msg = threading.Condition()
-
-    def is_up(self):
-        """ 
-        self.connecting has been introduced lately in several branches
-        of python (see issue #10340 of Python). In particular, it is not
-        present in the python 3.2.3 interpreter delivered in Ubuntu 12.04.
-        On this platform, just test of self.connected. There is still
-        possibly a little race  but it mitigate the issue.
-        """
-        if hasattr(self, 'connecting'):
-            return self.connecting or self.connected
-        else:
-            return self.connected
-
-    def subscribe(self, callback):
-        self._callbacks.append(callback)
-
-    def unsubscribe(self, callback):
-        self._callbacks.remove(callback)
-
-    def handle_error(self):
-        self.error = True
-        self.handle_close()
-
-    #### IN ####
-    def collect_incoming_data(self, data):
-        """Buffer the data"""
-        self._in_buffer += data
-
-    def found_terminator(self):
-        self.handle_msg(self._in_buffer)
-        self._in_buffer = b""
-
-    def handle_msg(self, msg):
-        """ append new raw :param msg: in the input queue
-
-        and call subscribed callback methods if any
-        """
-        with self._cv_new_msg:
-            self._in_queue.append(msg)
-            self._cv_new_msg.notify_all()
-        # handle callback(s)
-        decoded_msg = None
-        for callback in self._callbacks:
-            if not decoded_msg:
-                decoded_msg = self.decode( msg )
-            callback( decoded_msg )
-
-    def _msg_available(self):
-        return bool(self._in_queue)
-
-    def _get_last_msg(self):
-        return self.decode( self._in_queue[-1] )
-
-    # TODO implement last n msg decode and msg_queue with hash(msg) -> decoded msg
-    def last(self, n=1):
-        """ get the last message recieved
-
-        :returns: decoded message or None if no message available
-        """
-        with self._cv_new_msg:
-            if self._msg_available():
-                return self._get_last_msg()
-        logger.debug("last: no message in queue")
-        return None
-
-    def get(self, timeout=None):
-        """ wait :param timeout: for a new messge
-
-        When the timeout argument is present and not None, it should be a
-        floating point number specifying a timeout for the operation in seconds
-        (or fractions thereof).
-
-        :returns: decoded message or None in case of timeout
-        """
-        with self._cv_new_msg:
-            if self._cv_new_msg.wait(timeout):
-                return self._get_last_msg()
-        logger.debug("get: timed out")
-        return None
-
-    #### OUT ####
-    def publish(self, msg):
-        """ encode :param msg: and append the resulting bytes to the output queue """
-        self.push(self.encode( msg ))
-    #### patch code from asynchat, ``del deque[0]`` is not safe #####
-    def initiate_send(self):
-        while self.producer_fifo and self.connected:
-            first = self.producer_fifo.popleft()
-            # handle empty string/buffer or None entry
-            if not first:
-                if first is None:
-                    self.handle_close()
-                    return
-
-            # handle classic producer behavior
-            obs = self.ac_out_buffer_size
-            try:
-                data = first[:obs]
-            except TypeError:
-                data = first.more()
-                if data:
-                    self.producer_fifo.appendleft(data)
-                continue
-
-            if isinstance(data, str) and self.use_encoding:
-                data = bytes(data, self.encoding)
-
-            # send the data
-            try:
-                num_sent = self.send(data)
-            except socket.error:
-                self.handle_error()
-                return
-
-            if num_sent:
-                if num_sent < len(data) or obs < len(first):
-                    self.producer_fifo.appendleft(first[num_sent:])
-            # we tried to send some actual data
-            return
-
-
-    #### CODEC ####
-    def decode(self, msg_bytes):
-        """ decode bytes to string """
-        return msg_bytes.decode()
-
-    def encode(self, msg_str):
-        """ encode string to bytes """
-        return msg_str.encode() + MSG_SEPARATOR
-
-class StreamJSON(Stream):
-    def __init__(self, host, port, maxlen=100):
-        Stream.__init__(self, host, port, maxlen)
-
-    def decode(self, msg_bytes):
-        """ decode bytes to json object """
-        return json.loads(Stream.decode(self, msg_bytes))
-
-    def encode(self, msg_obj):
-        """ encode object to json string and then bytes """
-        return Stream.encode(self, json.dumps(msg_obj))

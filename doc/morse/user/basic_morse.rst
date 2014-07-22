@@ -41,17 +41,6 @@ Additionally, the following options can be given to the MORSE executable:
   lower left corner).
 - **-v** / **--version**: returns the current MORSE version
 
-Build your simulations
-======================
-
-The Builder API
----------------
-
-The MORSE ``Builder API``, is a set of components and methods to build a simulation
-scene. A simulation scene is composed of an environment and one or more robots
-composed of sensors and actuators. Each of those components are connected outside
-the simulator through middlewares.
-
 
 MORSE controls
 --------------
@@ -98,6 +87,8 @@ The following are key bindings already defined in any simulation scene
   :doc:`Builder API <../user/builder>` Environment class
 
 - :kbd:`Esc` key: stop and exit the simulation (cleaning up the connections)
+
+- :kbd:`F7` key: move the camera **CameraFP** near to the robot
 
 - :kbd:`F8` key: reset the position and orientation of the **CameraFP** to its
   initial state

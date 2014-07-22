@@ -4,11 +4,13 @@ from morse.core import status, mathutils
 import morse.core.blenderapi
 from morse.sensors.camera import Camera
 from morse.sensors.video_camera import VideoCamera
-from morse.helpers.components import add_data
+from morse.helpers.components import add_data, add_property
 
 class AbstractDepthCamera(VideoCamera):
 
-    _short_desc = "A camera capturing 3D points cloud"
+    add_property('near_clipping', 1.0, 'cam_near')
+    add_property('far_clipping', 20.0, 'cam_far')
+    add_property('retrieve_depth', True, 'retrieve_depth')
 
     def __init__(self, obj, parent=None):
         """ Constructor method.
@@ -40,9 +42,9 @@ class AbstractDepthCamera(VideoCamera):
 
             self.capturing = True
 
-            if (self._n > 0):
+            if self._n > 0:
                 self._n -= 1
-                if (self._n == 0):
+                if self._n == 0:
                     self.completed(status.SUCCESS)
         else:
             self.capturing = False
@@ -52,6 +54,8 @@ class AbstractDepthCamera(VideoCamera):
 class DepthCamera(AbstractDepthCamera):
     """
     This sensor generates a 3D point cloud from the camera perspective.
+
+    See also :doc:`../sensors/camera` for generic informations about Morse cameras.
     """
 
     _name = "Depth (XYZ) camera"
@@ -66,9 +70,9 @@ class DepthCamera(AbstractDepthCamera):
     def initialize(self):
         from morse.sensors.zbufferto3d import ZBufferTo3D
         # Store the camera parameters necessary for image processing
-        self.converter = ZBufferTo3D(self.local_data['intrinsic_matrix'][0][0],\
-                                     self.local_data['intrinsic_matrix'][1][1],\
-                                     self.near_clipping, self.far_clipping, \
+        self.converter = ZBufferTo3D(self.local_data['intrinsic_matrix'][0][0],
+                                     self.local_data['intrinsic_matrix'][1][1],
+                                     self.near_clipping, self.far_clipping,
                                      self.image_width, self.image_height)
 
     def process_image(self, image):
@@ -101,7 +105,7 @@ class DepthVideoCamera(AbstractDepthCamera):
     def initialize(self):
         from morse.sensors.zbuffertodepth import ZBufferToDepth
         # Store the camera parameters necessary for image processing
-        self.converter = ZBufferToDepth(self.near_clipping, self.far_clipping, \
+        self.converter = ZBufferToDepth(self.near_clipping, self.far_clipping,
                                         self.image_width, self.image_height)
 
     def process_image(self, image):
@@ -112,6 +116,8 @@ class DepthVideoCamera(AbstractDepthCamera):
 class RawImage(AbstractDepthCamera):
     """
     This sensor gets raw Z-Buffer from the camera perspective.
+
+    See also :doc:`../sensors/camera` for generic informations about Morse cameras.
     """
 
     _name = "Depth camera (raw Z-Buffer)"
@@ -127,3 +133,16 @@ class RawImage(AbstractDepthCamera):
         publish in C++, without having to re-serialize a Python object.
         """
         self.local_data['image'] = image
+
+
+class DepthCameraRotationZ(DepthCamera):
+    """Used for Velodyne sensor"""
+
+    add_property('rotation', 0.01745, 'rotation')
+
+    def default_action(self):
+        DepthCamera.default_action(self)
+        self.applyRotationZ(self.rotation)
+    def applyRotationZ(self, rotation):
+        # The second parameter specifies a "local" movement
+        self.bge_object.applyRotation([0, rotation, 0], True)

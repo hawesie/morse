@@ -5,7 +5,6 @@ This script tests the KUKA LWR arm, both the data and service api
 
 import sys
 import math
-from time import sleep
 from morse.testing.testing import MorseTestCase
 from pymorse import Morse, MorseServiceFailed
 
@@ -68,7 +67,7 @@ class ArmaturePoseTest(MorseTestCase):
             # Move the arm now, and get the measure 
             angles = [1.57, 2.0, 1.0, -1.28, 1.1, -2.0, 1.0]
             simu.robot.arm.set_rotations(angles)
-            sleep(0.1)
+            simu.sleep(0.1)
 
             pose = simu.robot.arm.arm_pose.get_state().result()
 
@@ -86,44 +85,47 @@ class ArmaturePoseTest(MorseTestCase):
 
             pose = simu.robot.arm.arm_pose.get()
 
-            self.assertEqual(len(pose), 7)
+            # 7 joints + timestamp
+            self.assertEqual(len(pose), 7 + 1) 
 
-            self.assertEqual(set(pose.keys()), set(JOINTS))
+            self.assertEqual(set(pose.keys()), set(JOINTS).union(set(['timestamp'])))
 
-            for j,v in pose.items():
-                self.assertAlmostEqual(v, 0.0, delta=precision)
-
+            for j, v in pose.items():
+                if j != 'timestamp':
+                    self.assertAlmostEqual(v, 0.0, delta=precision)
 
             simu.robot.arm.set_rotation("kuka_2", 1).result()
-            sleep(0.1)
+            simu.sleep(0.1)
             pose = simu.robot.arm.arm_pose.get()
 
             self.assertAlmostEqual(simu.robot.arm.arm_pose.get()["kuka_2"], 1.0, delta = precision)
 
-            for j,v in pose.items():
-                if j != "kuka_2":
+            for j, v in pose.items():
+                if j != "kuka_2" and j != 'timestamp':
                     self.assertAlmostEqual(v, 0.0, delta=precision)
 
 
             # Move the arm now, and get the measure 
             angles = [1.57, 2.0, 1.0, -1.28, 1.0, -2.0, 1.0]
             simu.robot.arm.set_rotations(angles)
-            sleep(0.1)
+            simu.sleep(0.1)
 
             target = dict(zip(JOINTS, angles))
             pose = simu.robot.arm.arm_pose.get()
             for j, v in pose.items():
-                self.assertAlmostEqual(v, target[j], delta=precision)
+                if j != 'timestamp':
+                    self.assertAlmostEqual(v, target[j], delta=precision)
 
 
             angles = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             simu.robot.arm.set_rotations(angles)
-            sleep(0.1)
+            simu.sleep(0.1)
 
             target = dict(zip(JOINTS, angles))
             pose = simu.robot.arm.arm_pose.get()
             for j, v in pose.items():
-                self.assertAlmostEqual(v, target[j], delta=precision)
+                if j != 'timestamp':
+                    self.assertAlmostEqual(v, target[j], delta=precision)
 
 
 ########################## Run these tests ##########################

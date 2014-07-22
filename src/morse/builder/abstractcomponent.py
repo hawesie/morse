@@ -5,6 +5,7 @@ import copy
 
 from morse.builder import bpymorse
 from morse.builder.data import *
+from morse.core.exceptions import MorseBuilderUnexportableError
 
 from morse.helpers.loading import get_class, load_module_attribute
 
@@ -67,20 +68,42 @@ class Configuration(object):
         except KeyError:
             return False
 
-    def write_config():
+    def _remove_entries(dict_, robot_list):
+        if robot_list is None:
+            return dict_
+        else:
+            res = {}
+            for k, v in dict_.items():
+                for robot in robot_list:
+                    if k.startswith(robot):
+                        res[k] = v
+                        break
+            return res
+
+
+    def write_config(robot_list):
         """ Write the 'component_config.py' file with the supplied settings """
         if not 'component_config.py' in bpymorse.get_texts().keys():
             bpymorse.new_text()
             bpymorse.get_last_text().name = 'component_config.py'
         cfg = bpymorse.get_text('component_config.py')
         cfg.clear()
-        cfg.write('component_datastream = ' + json.dumps(Configuration.datastream, indent=1) )
+        cfg.write('component_datastream = ' + json.dumps(
+            Configuration._remove_entries(Configuration.datastream, robot_list),
+            indent=1) )
         cfg.write('\n')
-        cfg.write('component_modifier = ' + json.dumps(Configuration.modifier, indent=1) )
+        cfg.write('component_modifier = ' + json.dumps(
+            Configuration._remove_entries(Configuration.modifier, robot_list),
+            indent=1) )
         cfg.write('\n')
-        cfg.write('component_service = ' + json.dumps(Configuration.service, indent=1) )
+        cfg.write('component_service = ' + json.dumps(
+            Configuration._remove_entries(Configuration.service, robot_list),
+            indent=1) )
         cfg.write('\n')
-        cfg.write('overlays = ' + json.dumps(Configuration.overlay, indent=1) )
+        cleaned_overlays = {}
+        for k, v in Configuration.overlay.items():
+            cleaned_overlays[k] = Configuration._remove_entries(v, robot_list)
+        cfg.write('overlays = ' + json.dumps(cleaned_overlays, indent=1) )
         cfg.write('\n')
 
 class AbstractComponent(object):
@@ -93,6 +116,7 @@ class AbstractComponent(object):
         self._category = category # for morseable
         self.basename = None
         self.children = []
+        self._exportable = True
 
         AbstractComponent.components.append(self)
 
@@ -117,7 +141,6 @@ class AbstractComponent(object):
         obj.parent = self
         self.children.append(obj)
 
-        #TODO: replace by sys._getframes() ??
         import inspect
         try:
             frame = inspect.currentframe()
@@ -132,9 +155,38 @@ class AbstractComponent(object):
                 if component == obj:
                     if not component.basename: # do automatic renaming only if a name is not already manually set
                         component.basename = name
+
         finally:
             del builderscript_frame
             del frame
+
+
+    @staticmethod
+    def close_context(level = 1):
+        import inspect
+        try:
+            frame = inspect.currentframe()
+            builderscript_frame = inspect.getouterframes(frame)[level][0] # parent frame
+            cmpts = builderscript_frame.f_locals
+
+            for name, component in cmpts.items():
+                if isinstance(component, AbstractComponent):
+
+                    if hasattr(component, "parent"):
+                        continue
+
+                    # do automatic renaming only if a name is not already manually set
+                    # component.name accessor set both basename and bpy.name,
+                    # which is the correct behaviour here. The bpy_name may be
+                    # rewritten by _rename_tree, to get the correct hierarchy.
+                    if not component.basename:
+                        Configuration.update_name(component.name, name)
+                        component.name = name
+
+        finally:
+            del builderscript_frame
+            del frame
+
 
     @property
     def name(self):
@@ -208,46 +260,7 @@ class AbstractComponent(object):
             self.properties(my_clock = timer(5.0), my_speed = int(5/2))
 
         """
-        prop = self._bpy_object.game.properties
-        for key in kwargs.keys():
-            if key in prop.keys():
-                self._property_set(key, kwargs[key])
-            else:
-                self._property_new(key, kwargs[key])
-
-    def _property_new(self, name, value, ptype=None):
-        """ Add a new game property for the Blender object
-
-        :param name: property name (string)
-        :param value: property value
-        :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
-                      optional, auto-detect, default=None)
-        """
-        self.select()
-        bpymorse.new_game_property()
-        prop = self._bpy_object.game.properties
-        # select the last property in the list (which is the one we just added)
-        prop[-1].name = name
-        return self._property_set(-1, value, ptype)
-
-    def _property_set(self, pid, value, ptype=None):
-        """ Really set the property for the property referenced by pid
-
-        :param pid: the index of property
-        :param value: the property value
-        :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
-                      optional, auto-detect, default=None)
-        """
-        prop = self._bpy_object.game.properties
-        if ptype == None:
-            # Detect the type (class name upper case)
-            ptype = value.__class__.__name__.upper()
-        if ptype == 'STR':
-            # Blender property string are called 'STRING' (and not 'str' as in Python)
-            ptype = 'STRING'
-        prop[pid].type = ptype
-        prop[pid].value = value
-        return prop[pid]
+        bpymorse.properties(self._bpy_object, **kwargs)
 
     def select(self):
         bpymorse.select_only(self._bpy_object)
@@ -287,10 +300,6 @@ class AbstractComponent(object):
 
         return None
 
-    def configure_mw(self, datastream, method=None, path=None, component=None):
-        logger.warning("configure_mw is deprecated, use add_stream instead")
-        return self.add_stream(datastream, method, path, component)
-
     def add_stream(self, datastream, method=None, path=None, classpath=None, direction = None, **kwargs):
         """ Add a data stream interface to the component
 
@@ -311,6 +320,8 @@ class AbstractComponent(object):
             component.add_stream('ros', topic='/myrobots/data')
 
         """
+        self._err_if_not_exportable()
+
         if not classpath:
             classpath = self.property_value("classpath")
 
@@ -371,7 +382,7 @@ class AbstractComponent(object):
 
                         # iterate over levels to find the one with the default flag
                         for key, value in klass._levels.items():
-                            if value[2] == True:
+                            if value[2]:
                                 level = key
                                 # set the right default level
                                 self.properties(abstraction_level = level)
@@ -434,16 +445,13 @@ class AbstractComponent(object):
         config.append(kwargs) # append additional configuration (eg. topic name)
         Configuration.link_datastream(self, config)
 
-    def configure_service(self, interface, component=None, config=None):
-        logger.warning("configure_service is deprecated, use add_service instead")
-        return self.add_service(interface, component, config)
-
     def add_service(self, interface, component=None, config=None):
         """ Add a service interface to the component
 
         Similar to the previous function. Its argument is the name of the
         interface to be used.
-        """ 
+        """
+
         if not component:
             component = self
         if not config:
@@ -456,21 +464,19 @@ class AbstractComponent(object):
         Its argument is the name of the interface to be used.
         """
         self.add_service(interface)
-        self.add_stream(interface, **kwargs)
+        if self._exportable:
+            self.add_stream(interface, **kwargs)
 
     def alter(self, modifier_name, classpath=None, **kwargs):
         """ Add a modifier specified by its first argument to the component """
         # Configure the modifier for this component
         config = []
         if not classpath:
-            classpath = MORSE_MODIFIER_DICT[modifier_name][self._blender_filename]
+            obj_classpath = self.property_value('classpath')
+            classpath = MORSE_MODIFIER_DICT[modifier_name][obj_classpath]
         config.append(classpath)
         config.append(kwargs)
         Configuration.link_modifier(self, config)
-
-    def configure_modifier(self, mod, config=None, **kwargs):
-        logger.error("configure_modifier is deprecated, use alter instead")
-        return self.alter(mod, config, **kwargs)
 
     def add_overlay(self, datastream, overlay, config=None, **kwargs):
         """ Add a service overlay for a specific service manager to the component
@@ -481,10 +487,6 @@ class AbstractComponent(object):
         if not config:
             config = MORSE_SERVICE_DICT[datastream]
         Configuration.link_overlay(self, config, overlay, kwargs)
-
-    def configure_overlay(self, datastream, overlay, config=None, **kwargs):
-        logger.warning("configure_overlay is deprecated, use add_overlay instead")
-        return self.add_overlay(datastream, overlay, config, **kwargs)
 
     def level(self, level):
         """ Set the 'realism level' of the component.
@@ -497,7 +499,7 @@ class AbstractComponent(object):
         self.properties(abstraction_level = level)
 
     def frequency(self, frequency=None, delay=0):
-        """ Set the frequency delay for the call of the Python module
+        """ Set the frequency of the Python module
 
         :param frequency: (int) Desired frequency,
             0 < frequency < logic tics
@@ -575,18 +577,29 @@ class AbstractComponent(object):
         MORSE_COMPONENTS/``self._category``/``component``.blend/Object/
         or in: MORSE_RESOURCE_PATH/``component``/Object/
 
+        If `component` is not set (neither as argument of `append_meshes` nor
+        through the :py:class:`AbstractComponent` constructor), a Blender
+        `Empty` is created instead.
+
         :param objects: list of the objects names to append
         :param component: component in which the objects are located
         :param prefix: filter the objects names to append (used by PassiveObject)
         :return: list of the imported (selected) Blender objects
         """
-        if not component:
-            component = self._blender_filename
+
+
+        component = component or self._blender_filename
+
+        if not component: # no Blender resource: simply create an empty
+            bpymorse.deselect_all()
+            bpymorse.add_morse_empty()
+            return [bpymorse.get_first_selected_object(),]
+
 
         if component.endswith('.blend'):
             filepath = os.path.abspath(component) # external blend file
         else:
-            filepath = os.path.join(MORSE_COMPONENTS, self._category, \
+            filepath = os.path.join(MORSE_COMPONENTS, self._category,
                                     component + '.blend')
 
         looked_dirs = [filepath]
@@ -639,14 +652,14 @@ class AbstractComponent(object):
         if component.endswith('.dae'):
             filepath = os.path.abspath(component) # external blend file
         else:
-            filepath = os.path.join(MORSE_COMPONENTS, self._category, \
+            filepath = os.path.join(MORSE_COMPONENTS, self._category,
                                     component + '.dae')
 
         if not os.path.exists(filepath):
             logger.error("Collada file %s for external asset import can" \
                          "not be found.\nEither provide an absolute path, or" \
                          "a path relative to MORSE assets directory (typically"\
-                         "$PREFIX/share/morse/data)" % (filepath))
+                         "$PREFIX/share/morse/data)" % filepath)
             return
 
         # Save a list of objects names before importing Collada
@@ -693,12 +706,22 @@ class AbstractComponent(object):
             logger.warning("profile currently supports only sensors (%s)"%self)
         for key in ["profile", "profile_action", "profile_modifiers",
                     "profile_datastreams"]:
-            prop = self._property_new(key, "0")
+            prop = bpymorse._property_new(self._bpy_object, key, "0")
             prop.show_debug = True
         bpymorse.get_context_scene().game_settings.show_debug_properties = True
 
     def __str__(self):
         return self.name
+
+    def is_exportable(self):
+        return self._exportable
+
+    def mark_unexportable(self):
+        self._exportable = False
+
+    def _err_if_not_exportable(self):
+        if not self._exportable:
+            raise MorseBuilderUnexportableError(self.name)
 
 class timer(float):
     __doc__ = "this class extends float for the game properties configuration"

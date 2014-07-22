@@ -9,7 +9,7 @@ bpy = None
 try:
     import bpy
 except ImportError:
-    print("ATTENTION: MORSE is running outside Blender! (no bpy)")
+    print("WARNING: MORSE is running outside Blender! (no bpy)")
 
 def empty_method(*args, **kwargs):
     print(args, kwargs)
@@ -39,6 +39,8 @@ new_mesh = empty_method
 new_object = empty_method
 apply_transform = empty_method
 open_sound = empty_method
+new_scene = empty_method
+armatures = empty_method
 
 if bpy:
     select_all = bpy.ops.object.select_all
@@ -67,6 +69,15 @@ if bpy:
     new_object = bpy.data.objects.new
     apply_transform = bpy.ops.object.transform_apply
     open_sound = bpy.ops.sound.open
+    new_scene = bpy.ops.scene.new
+    armatures = bpy.data.armatures
+
+def version():
+    if bpy:
+        return bpy.app.version
+    else:
+        return 0,0,0
+
 
 def create_new_material():
     all_materials = get_materials().keys()
@@ -75,10 +86,10 @@ def create_new_material():
                      if name not in all_materials].pop()
     return get_material(material_name)
 
-def add_morse_empty():
+def add_morse_empty(shape = 'ARROWS'):
     """Add MORSE Component Empty object which hlods MORSE logic"""
     if bpy.app.version >= (2, 65, 0):
-        add_empty(type='ARROWS')
+        add_empty(type = shape)
     else:
         add_object(type='EMPTY')
 
@@ -157,11 +168,49 @@ def get_sound(name_or_id):
 def get_last_sound():
     return get_sound(-1)
 
+def get_scenes():
+    if bpy:
+        return bpy.data.scenes
+    else:
+        return []
+
+def get_scene(name_or_id):
+    if bpy and bpy.data.scenes:
+        return bpy.data.scenes[name_or_id]
+    else:
+        return None
+
+def set_active_scene(name_or_id):
+    if bpy:
+        scene = get_scene(name_or_id)
+        if scene:
+            bpy.data.screens['Default'].scene = scene
+            bpy.context.screen.scene = scene
+            return scene
+        else:
+            return None
+    else:
+        return None
+
+def get_last_scene():
+    return get_scene(-1)
+
 def select_only(obj):
     if bpy:
         deselect_all()
         obj.select = True
         bpy.context.scene.objects.active = obj
+
+def delete(objects):
+    if not bpy:
+        return
+    if not isinstance(objects, list):
+        objects = [objects]
+    for obj in objects:
+        if isinstance(obj, str):
+            obj = bpy.data.objects[obj]
+        select_only(obj)
+        bpy.ops.object.delete()
 
 def get_objects():
     if bpy:
@@ -261,3 +310,101 @@ def set_speed(fps=0, logic_step_max=0, physics_step_max=0):
     get_context_scene().game_settings.logic_step_max = logic_step_max
     get_context_scene().game_settings.physics_step_max = physics_step_max
 
+def get_properties(obj):
+    return {n: p.value for n,p in obj.game.properties.items()}
+
+def properties(obj, **kwargs):
+    """ Add/modify the game properties of the Blender object
+
+    Usage example:
+
+    .. code-block:: python
+
+        properties(obj, capturing = True, classpath='module.Class', speed = 5.0)
+
+    will create and/or set the 3 game properties Component_Tag, classpath, and
+    speed at the value True (boolean), 'module.Class' (string), 5.0 (float).
+    In Python the type of numeric value is 'int', if you want to force it to
+    float, use the following: float(5) or 5.0
+    Same if you want to force to integer, use: int(a/b)
+    For the TIMER type, see the class timer(float) defined in this module:
+
+    .. code-block:: python
+
+        properties(obj, my_clock = timer(5.0), my_speed = int(5/2))
+
+    """
+    for key in kwargs.keys():
+        if key in obj.game.properties.keys():
+            _property_set(obj, key, kwargs[key])
+        else:
+            _property_new(obj, key, kwargs[key])
+
+def _property_new(obj, name, value, ptype=None):
+    """ Add a new game property for the Blender object
+
+    :param name: property name (string)
+    :param value: property value
+    :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
+                  optional, auto-detect, default=None)
+    """
+    select_only(obj)
+    new_game_property()
+    # select the last property in the list (which is the one we just added)
+    obj.game.properties[-1].name = name
+    return _property_set(obj, -1, value, ptype)
+
+def _property_set(obj, name_or_id, value, ptype=None):
+    """ Really set the property for the property referenced by name_or_id
+
+    :param name_or_id: the index or name of property (OrderedDict)
+    :param value: the property value
+    :param ptype: property type (enum in ['BOOL', 'INT', 'FLOAT', 'STRING', 'TIMER'],
+                  optional, auto-detect, default=None)
+    """
+    if ptype is None:
+        # Detect the type (class name upper case)
+        ptype = value.__class__.__name__.upper()
+    if ptype == 'STR':
+        # Blender property string are called 'STRING' (and not 'str' as in Python)
+        ptype = 'STRING'
+    obj.game.properties[name_or_id].type = ptype
+    obj.game.properties[name_or_id].value = value
+    return obj.game.properties[name_or_id]
+
+def set_viewport(viewport_shade='WIREFRAME', clip_end=1000):
+    """ Set the default view mode
+
+    :param viewport_shade: enum in ['BOUNDBOX', 'WIREFRAME', 'SOLID', 'TEXTURED'], default 'WIREFRAME'
+    """
+    for area in bpy.context.window.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    space.viewport_shade = viewport_shade
+                    space.clip_end = clip_end
+
+def set_viewport_perspective(perspective='CAMERA'):
+    """ Set the default view view_perspective
+
+    Equivalent to ``bpy.ops.view3d.viewnumpad`` with good context.
+
+    :param perspective: View, Preset viewpoint to use
+    :type  perspective: enum in ['FRONT', 'BACK', 'LEFT', 'RIGHT', 'TOP',
+                                 'BOTTOM', 'CAMERA'], default 'CAMERA'
+    """
+    for area in bpy.context.window.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    space.region_3d.view_perspective = perspective
+
+def fullscreen(fullscreen=True):
+    """ Run the simulation fullscreen
+
+    :param fullscreen: Start player in a new fullscreen display
+    :type  fullscreen: Boolean, default: True
+    """
+    if not bpy:
+        return
+    bpy.context.scene.game_settings.show_fullscreen = fullscreen

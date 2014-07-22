@@ -16,13 +16,13 @@ class MotionVW(morse.core.actuator.Actuator):
              'linear velocity in x direction (forward movement) (m/s)')
     add_data('w', 0.0, 'float', 'angular velocity (rad/s)')
 
-    add_property('_type', 'Position', 'ControlType', 'string',
+    add_property('_type', 'Velocity', 'ControlType', 'string',
                  "Kind of control, can be one of ['Velocity', 'Position']")
 
     def __init__(self, obj, parent=None):
         logger.info('%s initialization' % obj.name)
         # Call the constructor of the parent class
-        super(self.__class__, self).__init__(obj, parent)
+        morse.core.actuator.Actuator.__init__(self, obj, parent)
 
         logger.info('Component initialized')
 
@@ -68,4 +68,4 @@ class MotionVW(morse.core.actuator.Actuator):
         except ZeroDivisionError:
             pass
 
-        self.apply_speed(self._type, [vx, vy, vz], [rx, ry, rz])
+        self.robot_parent.apply_speed(self._type, [vx, vy, vz], [rx, ry, rz])

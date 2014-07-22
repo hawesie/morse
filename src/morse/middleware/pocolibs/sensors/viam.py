@@ -2,7 +2,7 @@ import logging; logger = logging.getLogger("morse." + __name__)
 import math
 from morse.core import blenderapi
 from morse.middleware import AbstractDatastream
-from morse.middleware.pocolibs_datastream import poster_name, Pocolibs
+from morse.middleware.pocolibs_datastream import poster_name, PocolibsDatastreamManager
 
 try:
     from morse.middleware.pocolibs.viam import *
@@ -44,7 +44,7 @@ class ViamPoster(AbstractDatastream):
 
             # viam expects first the left camera, then the right camera
             # Check the y difference between the two cameras
-            if (self.pos_cam[0][1] < self.pos_cam[1][1]):
+            if self.pos_cam[0][1] < self.pos_cam[1][1]:
                 self.cameras.reverse()
                 self.camera_order.reverse()
 
@@ -80,7 +80,7 @@ class ViamPoster(AbstractDatastream):
         pom_robot_position.roll = main_to_origin.roll
 
         # Compute the current time
-        pom_date, t = Pocolibs.compute_date()
+        pom_date, t = PocolibsDatastreamManager.compute_date()
 
         ors_cameras = []
         ors_images = []
@@ -101,7 +101,7 @@ class ViamPoster(AbstractDatastream):
                         wrongly defined")
 
             # Don't create a poster if the camera is disabled
-            if image_data == None or not camera_instance.capturing:
+            if image_data is None or not camera_instance.capturing:
                 logger.debug("Camera '%s' not capturing. Exiting viam poster" % \
                         camera_instance.bge_object.name)
                 return
@@ -116,8 +116,8 @@ class ViamPoster(AbstractDatastream):
             camera_data.x = main_to_sensor.x
             camera_data.y = main_to_sensor.y
             camera_data.z = main_to_sensor.z
-            camera_data.yaw = main_to_sensor.yaw 
-            camera_data.pitch = main_to_sensor.pitch + math.pi # XXX WTF 
+            camera_data.yaw = main_to_sensor.yaw
+            camera_data.pitch = main_to_sensor.pitch
             camera_data.roll = main_to_sensor.roll
             camera_data.flipped = camera_instance.vertical_flip
 

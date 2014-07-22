@@ -1,8 +1,10 @@
 import logging; logger = logging.getLogger("morse." + __name__)
 from abc import ABCMeta
+from math import sqrt
 import morse.core.robot
 from morse.core import blenderapi
-import mathutils
+from morse.core import mathutils
+from morse.helpers.components import add_property
 
 class PhysicsWheelRobot(morse.core.robot.Robot):
     """ Abstract base class for robots with wheels that turn as
@@ -12,12 +14,23 @@ class PhysicsWheelRobot(morse.core.robot.Robot):
     # Make this an abstract class
     __metaclass__ = ABCMeta
 
+    add_property('_has_suspension', True, 'HasSuspension', 'bool', 
+                 'Determine if the underlaying robot has suspension, \
+                  i.e. wheels can move independently of the body of the \
+                  robot')
+    add_property('_has_steering', True, 'HasSteering', 'bool',
+                 'Determine if the wheels turn independently of the body \
+                  of the robot.')
+
     # Local dictionaries to store references to the wheels
     _wheel_index = ['FL', 'FR', 'RL', 'RR']
-    _wheels = {}
-    _wheel_positions = {}
-    _wheel_orientations = {}
-    _wheel_joints = {}
+
+    def __init__(self, obj, parent):
+        morse.core.robot.Robot.__init__(self, obj, parent)
+        self._wheels = {}
+        self._wheel_positions = {}
+        self._wheel_orientations = {}
+        self._wheel_joints = {}
 
     def action(self):
         """ Overload the 'action' method of the Robot
@@ -29,12 +42,16 @@ class PhysicsWheelRobot(morse.core.robot.Robot):
         self.default_action()
 
 
-    def GetWheels(self):
+    def get_wheels(self):
         # get pointers to and physicsIds of all objects
         # get wheel pointers - needed by wheel speed sensors and to
         # set up constraints
         # bullet vehicles always have 4 wheels
-        scene=blenderapi.scene()
+        scene = blenderapi.scene()
+
+        self._wheel_radius = None
+
+        caster_wheel_name = self.bge_object.get('CasterWheelName', None)
 
         #  inherited from the parent robot
         for index in self._wheel_index:
@@ -45,65 +62,49 @@ class PhysicsWheelRobot(morse.core.robot.Robot):
                 wheel = scene.objects[self.bge_object[name]]
             except:
                 #import traceback
-                #traceback.print_exc()
+                #traceback._exc()
                 wheel = None
 
             if wheel:
                 self._wheels[index] = wheel
                 logger.info("\tWheel %s: %s" % (index, wheel.name))
-                self._wheel_positions[index] = mathutils.Vector(wheel.worldPosition)
-                self._wheel_orientations[index] = mathutils.Matrix(wheel.worldOrientation)
+                self._wheel_positions[index] = \
+                    mathutils.Vector(wheel.worldPosition)
+                self._wheel_orientations[index] = \
+                    mathutils.Matrix(wheel.worldOrientation)
                 # Make the wheels orphans
                 wheel.removeParent()
                 # Keep their transformations
                 #wheel.worldPosition = self._wheel_positions[index]
                 #wheel.worldOrientation = self._wheel_orientations[index]
 
-        logger.debug("GetWheels %s" % self._wheels)
+                # get wheel radius if not already computed
+                if wheel.name != caster_wheel_name and not self._wheel_radius:
+                    self._wheel_radius = self.get_wheel_radius(self.bge_object[name])
 
-        # get wheel radius
-        self._wheelRadius=self.GetWheelRadius(self.bge_object['WheelFLName'])
+        logger.debug("get_wheels %s" % self._wheels)
 
         # Add a free rotating wheel if indicated in the robot
-        if 'CasterWheelName' in self.bge_object:
-            wheel = scene.objects[self.bge_object['CasterWheelName']]
+        if caster_wheel_name and caster_wheel_name != 'None':
+            wheel = scene.objects[caster_wheel_name]
             wheel_position = mathutils.Vector(wheel.worldPosition)
-            self.AttachCasterWheelToBody(wheel, self.bge_object, wheel_position)
+            self.attach_caster_wheel_to_body(wheel, self.bge_object, wheel_position)
 
-
-    def ReadGenericParameters(self):
-        # get needed parameters from the blender object
-        # determines if vehicle has suspension or just wheels
-        try:
-            self._HasSuspension=self.bge_object['HasSuspension']
-        except KeyError as e:
-            self._HasSuspension=True
-            logger.info('HasSuspension property not present and defaulted to True')
-        except:
-            import traceback
-            traceback.print_exc()
-
-        # determines if vehicle has steerable front wheels or not
-        try:
-            self._HasSteering=self.bge_object['HasSteering']
-        except KeyError as e:
-            self._HasSteering=True
-            logger.info('HasSteering property not present and defaulted to True')
-        except:
-            import traceback
-            traceback.print_exc()
-
-    def GetTrackWidth(self):
+    def get_track_width(self):
         # get lateral positions of the wheels
-        posL = self._wheel_positions['FL']
-        posR = self._wheel_positions['FR']
-        # subtract y coordinates of wheels to get width
-        return posL[1]-posR[1]
+        pos_l = self._wheel_positions['FL']
+        pos_r = self._wheel_positions['FR']
 
-    def GetWheelRadius(self, wheelName):
-        dims=blenderapi.objectdata(wheelName).dimensions
+        diff_x = pos_l[0] - pos_r[0]
+        diff_y = pos_l[1] - pos_r[1]
+        diff_z = pos_l[2] - pos_r[2]
+        return sqrt( diff_x ** 2 + diff_y ** 2 + diff_z ** 2)
+
+    def get_wheel_radius(self, wheel_name):
+        dims = blenderapi.objectdata(wheel_name).dimensions
         # average the x and y dimension to get diameter - divide by 2 for radius
-        return (dims[0]+dims[1])/4
+        radius = (dims[0]+dims[1])/4
+        return radius
 
 
 class MorsePhysicsRobot(PhysicsWheelRobot):
@@ -112,39 +113,51 @@ class MorsePhysicsRobot(PhysicsWheelRobot):
     Inherits from the base robot class.
     """
 
+    add_property('_fix_turning', 0.0, 'FixTurningSpeed', 'double', 
+                'Overwrite the value of the distance between wheels in '
+                'the computations of the wheel speeds. This effectively '
+                'changes the turning speed of the robot, and can be used '
+                'to compensate for the slip of the wheels while turning. '
+                'If the value 0.0 is used, the real distance between wheels '
+                'is used.')
+
     def __init__ (self, obj, parent=None):
         """ Constructor method. """
         # Call the constructor of the parent class
-        super(MorsePhysicsRobot, self).__init__(obj, parent)
+        PhysicsWheelRobot.__init__(self, obj, parent)
 
         # get wheel references and ID's
-        self.GetWheels()
+        self.get_wheels()
 
         # construct the vehicle
         self.build_vehicle()
+
+        if self._fix_turning != 0.0:
+            self._trackWidth = self._fix_turning
+
+        logger.warn("Using wheel separation of %.4f" % self._trackWidth)
+
+        # Force speed at 0.0 at startup
+        self.apply_vw_wheels(0.0, 0.0)
 
 
     def build_vehicle(self):
         """ Apply the constraints to the vehicle parts. """
 
-        # get a link to the blender scene to look for wheel and suspension objectsscene = blenderapi.scene()
-        # get needed parameters from the blender object
-        self.ReadGenericParameters()
-
         # chassis ID - main object should be chassis model
         self._chassis_ID = self.bge_object.getPhysicsId()
 
         # get track width
-        self._trackWidth=self.GetTrackWidth();
+        self._trackWidth = self.get_track_width()
 
         # set up wheel constraints
         # add wheels to either suspension arms or vehicle chassis
-        if (self._HasSuspension):
-            self.BuildModelWithSuspension()
+        if self._has_suspension:
+            self.build_model_with_suspension()
         else:
-            self.BuildModelWithoutSuspension()
+            self.build_model_without_suspension()
 
-#    def BuildModelWithSuspension(self):
+#    def build_model_with_suspension(self):
 #        """ Add all the constraints to attach the wheels to
 #        the a-arms and then the a-arms to the body """
 #        scene = blenderapi.scene()
@@ -188,26 +201,27 @@ class MorsePhysicsRobot(PhysicsWheelRobot):
 #        self._wheelRLJoint=self.AttachWheelWithSuspension(self._wheelRL,self.bge_object,self._armRL)
 #        self._wheelRRJoint=self.AttachWheelWithSuspension(self._wheelRR,self.bge_object,self._armRR)
 
-    def BuildModelWithoutSuspension(self):
+    def build_model_without_suspension(self):
         """ Add all the constraints to attach the wheels to the body """
         for index in self._wheels.keys():
-            self._wheel_joints[index] = self.AttachWheelToBody(self._wheels[index], self.bge_object, self._wheel_positions[index])
+            self._wheel_joints[index] = self.attach_wheel_to_body(
+                    self._wheels[index], self.bge_object,
+                    self._wheel_positions[index])
 
-    def AttachWheelToBody(self, wheel, parent, wheelPos):
-        """ Attaches the wheel to the given parent using a 6DOF constraint """
-        # set the wheel positions relative to the robot in case the
-        # chassis was moved by the builder script or manually in blender
-        """
-        globalWheelPos=wheelPos+parent.worldPosition
-        wheel.worldPosition=globalWheelPos
+    def attach_wheel_to_body(self, wheel, parent, wheel_pos):
+        """ Attaches the wheel to the given parent using a 6DOF constraint
+
+        Set the wheel positions relative to the robot in case the
+        chassis was moved by the builder script or manually in blender
         """
 
-        result = parent.getVectTo(wheel);
+        result = parent.getVectTo(wheel)
         ## result is a unit vector (result[2]) and a length(result[0])
         ## multiply them together to get the complete vector
-        wheelPos=result[0]*result[2]
+        wheel_pos = result[0] * result[2]
 
-        logger.debug("Added wheel '%s' at ('%f','%f','%f')" %(wheel.name, wheelPos[0], wheelPos[1], wheelPos[2]))
+        logger.debug("Added wheel '%s' at ('%f','%f','%f')" %
+                (wheel.name, wheel_pos[0], wheel_pos[1], wheel_pos[2]))
 
         # create constraint to allow wheel to spin
         # For an explanation on the parameters, see:
@@ -216,36 +230,81 @@ class MorsePhysicsRobot(PhysicsWheelRobot):
                 parent.getPhysicsId(),  # get physics ID of the parent object
                 wheel.getPhysicsId(),   # get physics ID of the wheel object
                 12,                     # 6dof constraint
-                wheelPos[0], wheelPos[1], wheelPos[2],  # pivot position
+                wheel_pos[0], wheel_pos[1], wheel_pos[2],  # pivot position
                 0,0,0,                  # pivot axis
                 128)    # flag, 128=disable collision between wheel and parent
         # no parameters are set on x axis to allow full rotation about it
-        joint.setParam(4,0.0,0.0) # no rotation about Y axis - min=0, max=0
-        joint.setParam(5,0.0,0.0) # no rotation about Z axis - min=0, max=0
+        joint.setParam(4, 0.0, 0.0) # no rotation about Y axis - min=0, max=0
+        joint.setParam(5, 0.0, 0.0) # no rotation about Z axis - min=0, max=0
         return joint # return a reference to the constraint
 
-    def AttachCasterWheelToBody(self, wheel, parent, wheelPos):
+    def attach_caster_wheel_to_body(self, wheel, parent, wheel_pos):
         """ Attaches a freely rotating wheel to the given parent
         using a 6DOF constraint. It can also rotate around the Z axis """
-        result = parent.getVectTo(wheel);
+
+        result = parent.getVectTo(wheel)
         ## result is a unit vector (result[2]) and a length(result[0])
         ## multiply them together to get the complete vector
-        wheelPos=result[0]*result[2]
+        wheel_pos = result[0] * result[2]
 
-        logger.debug("Added caster wheel '%s' at ('%f','%f','%f')" %(wheel.name, wheelPos[0], wheelPos[1], wheelPos[2]))
+        logger.debug("Added caster wheel '%s' at ('%f','%f','%f')" %
+                (wheel.name, wheel_pos[0], wheel_pos[1], wheel_pos[2]))
 
         # create constraint to allow wheel to spin
         joint = blenderapi.constraints().createConstraint(
                 parent.getPhysicsId(),  # get physics ID of the parent object
                 wheel.getPhysicsId(),   # get physics ID of the wheel object
                 12,                     # 6dof constraint
-                wheelPos[0], wheelPos[1], wheelPos[2],  # pivot position
-                0,0,0,                  # pivot axis
+                wheel_pos[0], wheel_pos[1], wheel_pos[2],  # pivot position
+                0, 0, 0,                  # pivot axis
                 128)    # flag, 128=disable collision between wheel and parent
         # no parameters are set on x and z axis to allow full rotation about it
-        joint.setParam(4,0.0,0.0) # no rotation about Y axis - min=0, max=0
-        joint.setParam(5,0.0,0.0) # no rotation about Z axis - min=0, max=0
+        joint.setParam(4, 0.0, 0.0) # no rotation about Y axis - min=0, max=0
+        joint.setParam(5, 0.0, 0.0) # no rotation about Z axis - min=0, max=0
         return joint # return a reference to the constraint
+
+    def apply_vw_wheels(self, vx, vw):
+        """ Apply (v, w) to the parent robot. """
+
+        # calculate desired wheel speeds and set them
+        if abs(vx) < 0.001 and abs(vw) < 0.001:
+            # stop the wheel when velocity is below a given threshold
+            for index in self._wheels.keys():
+                self._wheel_joints[index].setParam(9, 0, 100.0)
+
+            self._stopped = True
+        else:
+            # this is need to "wake up" the physic objects if they have
+            # gone to sleep apply a tiny impulse straight down on the
+            # object
+            if self._stopped:
+                self.bge_object.applyImpulse(
+                   self.bge_object.position, (0.0, 0.1, -0.000001))
+
+            # no longer stopped
+            self._stopped = False
+
+            # Another formula for computing left and right wheel speeds:
+            # http://arri.uta.edu/acs/jmireles/Robotics/KinematicsMobileRobots.pdf
+            v_ws_l = vx - (self._trackWidth / 2.0) * vw
+            v_ws_r = vx + (self._trackWidth / 2.0) * vw
+
+            # convert to angular speeds
+            w_ws_l = v_ws_l / self._wheel_radius
+            w_ws_r = v_ws_r / self._wheel_radius
+
+            # set wheel speeds - front and rear wheels have the same speed
+            # Left side wheels
+            self._wheel_joints['FL'].setParam(9, w_ws_l, 100.0)
+            if 'RL' in self._wheels:
+                self._wheel_joints['RL'].setParam(9, w_ws_l, 100.0)
+            # Right side wheels
+            self._wheel_joints['FR'].setParam(9, w_ws_r, 100.0)
+            if 'RR' in self._wheels:
+                self._wheel_joints['RR'].setParam(9, w_ws_r, 100.0)
+
+            logger.debug("New speeds set: left=%.4f, right=%.4f" %
+                         (w_ws_l, w_ws_r))
 
 
     def AttachWheelWithSuspension(self, wheel, parent, suspensionArm):

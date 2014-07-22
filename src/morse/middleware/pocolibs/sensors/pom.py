@@ -11,7 +11,7 @@ class PomSensorPoster(PocolibsDataStreamOutput):
     _type_url = "http://trac.laas.fr/git/pom-genom/tree/pomStruct.h#n180"
 
     def initialize(self):
-        super(self.__class__, self).initialize(POM_ME_POS)
+        PocolibsDataStreamOutput.initialize(self, POM_ME_POS)
 
         # Initialise the object
         self.obj = POM_ME_POS()
@@ -39,7 +39,7 @@ class PomPoster(PocolibsDataStreamOutput):
     _type_url = "http://trac.laas.fr/git/pom-genom/tree/pomStruct.h#n211"
 
     def initialize(self):
-        super(self.__class__, self).initialize(POM_POS)
+        PocolibsDataStreamOutput.initialize(self, POM_POS)
 
         # Initialise the object
         self.obj = POM_POS()
@@ -53,7 +53,7 @@ class PomPoster(PocolibsDataStreamOutput):
         self.obj.mainToOrigin.euler.yaw = self.data.get('yaw', 0.0)
         self.obj.mainToOrigin.euler.pitch = self.data.get('pitch', 0.0)
         self.obj.mainToOrigin.euler.roll = self.data.get('roll', 0.0)
-        self.obj.date = self.obj.date + 1
+        self.obj.date += 1
         self.obj.pomTickDate = self.obj.date
         self.write(self.obj)
 
