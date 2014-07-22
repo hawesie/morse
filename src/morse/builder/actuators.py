@@ -1,30 +1,41 @@
-from morse.builder.creator import ActuatorCreator
+import logging; logger = logging.getLogger("morsebuilder." + __name__)
+from morse.builder.creator import ComponentCreator, ActuatorCreator
 from morse.builder.blenderobjects import *
-from morse.builder import Actuator, Armature
+
+class Arucomarker(ActuatorCreator):
+    _classpath = "morse.actuators.arucomarker.Arucomarker"
+    _blendname = "arucomarker"
+
+    def __init__(self, name=None):
+        ActuatorCreator.__init__(self, name)
+        self.append_meshes(['white_plane', 'arplane', 'arplane.back'])
 
 class Destination(ActuatorCreator):
+    _classpath = "morse.actuators.destination.Destination"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.destination.Destination",
-                                 "destination")
+        ActuatorCreator.__init__(self, name)
 
 class ForceTorque(ActuatorCreator):
+    _classpath = "morse.actuators.force_torque.ForceTorque"
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.force_torque.ForceTorque",
-                                 "force_torque")
+        ActuatorCreator.__init__(self, name)
 
 class MocapControl(ActuatorCreator):
+    _classpath = "morse.actuators.mocap_control.MocapControl"
+
     def __init__(self):
         ActuatorCreator.__init__(self)
-        self.properties(classpath="morse.actuators.mocap_control.MocapControl")
 
 # Gripper uses Actuator from morse.builder
-class Gripper(Actuator):
+class Gripper(ActuatorCreator):
+    _classpath = "morse.actuators.gripper.Gripper"
+    _blendname = "gripper"
+
     def __init__(self, name=None):
-        Actuator.__init__(self, "gripper")
-        self.name = name
-        self.properties(classpath = "morse.actuators.gripper.Gripper")
+        ActuatorCreator.__init__(self, name,
+                    action = ActuatorCreator.USE_BLEND,
+                    make_morseable = False)
         self.properties(Angle = 60.0, Distance = 0.5)
     def properties(self, **kwargs):
         radar = self._bpy_object.game.sensors["Radar"]
@@ -32,17 +43,19 @@ class Gripper(Actuator):
             radar.angle = kwargs['Angle']
         if 'Distance' in kwargs:
             radar.distance = kwargs['Distance']
-        Actuator.properties(self, **kwargs)
+        ActuatorCreator.properties(self, **kwargs)
 
 
 class Keyboard(ActuatorCreator):
+    _classpath = "morse.actuators.keyboard.Keyboard"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.keyboard.Keyboard",
-                                 "keyboard")
-        self.properties(Speed = 1.0)
+        ActuatorCreator.__init__(self, name)
+        self.mark_unexportable()
 
 class Joystick(ActuatorCreator):
+    _classpath = "morse.actuators.joystick.Joystick"
+
     def __init__(self, name=None, index=0):
         """ Create a new Joystick controller
 
@@ -50,8 +63,7 @@ class Joystick(ActuatorCreator):
         :type index:  int in [0, 7], default 0
         """
         ActuatorCreator.__init__(self, name)
-        self.properties(classpath = "morse.actuators.joystick.Joystick")
-        self.properties(Speed = 1.0)
+        self.mark_unexportable()
         obj = bpymorse.get_context_object()
         # replace Always sensor by Joystick sensor
         sensor = obj.game.sensors[-1]
@@ -63,88 +75,84 @@ class Joystick(ActuatorCreator):
         sensor.event_type = 'AXIS'
         sensor.use_all_events = True
 
-# kuka_lwr uses Actuator from morse.builder
-class KukaLWR(Armature):
-    def __init__(self, name=None):
-        Armature.__init__(self, model_name = "kuka_lwr")
-        self.name = name
-        self.create_ik_targets(["kuka_7"])
-
-
-class Mocap(ActuatorCreator):
-    def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.mocap_control.MocapControl",
-                                 "mocap_control")
-
 class Orientation(ActuatorCreator):
+    _classpath = "morse.actuators.orientation.Orientation"
+
+    def __init__(self, name=None):
+        ActuatorCreator.__init__(self, name)
+
+class PA10(ActuatorCreator):
+    _classpath = "morse.actuators.pa_10.PA10"
+    _blendname = "pa_10"
+
     def __init__(self, name=None):
         ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.orientation.Orientation",
-                                 "orientation")
-
-# pa_10 uses Actuator from morse.builder
-class PA10(Actuator):
-    def __init__(self, name=None):
-        Actuator.__init__(self, "pa_10")
-        self.name = name
-        self.properties(classpath = "morse.actuators.pa_10.PA10", Speed = 1.0)
-        # Sound Game Logic Actuator servo_1.mp3
+                action = ComponentCreator.USE_BLEND,
+                make_morseable = False)
+        self.properties(Speed = 1.0)
 
 class PTU(ActuatorCreator):
+    _classpath = "morse.actuators.ptu.PTU"
+    _blendname = "ptu"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.ptu.PTU", "ptu")
+        ActuatorCreator.__init__(self, name)
         self.properties(Speed = 1.0, Manual = False, Tolerance = 0.01)
         # append PanBase with its logic
         self.append_meshes(['PanBase', 'TiltBase'])
 
 class RotorcraftAttitude(ActuatorCreator):
+    _classpath = "morse.actuators.rotorcraft_attitude.RotorcraftAttitude"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-            "morse.actuators.rotorcraft_attitude.RotorcraftAttitude",
-            "rotorcraft_attitude")
+        ActuatorCreator.__init__(self, name)
+
+class RotorcraftVelocity(ActuatorCreator):
+    _classpath = "morse.actuators.rotorcraft_velocity.RotorcraftVelocity"
+    def __init__(self, name=None):
+        ActuatorCreator.__init__(self, name)
 
 class RotorcraftWaypoint(ActuatorCreator):
+    _classpath = "morse.actuators.rotorcraft_waypoint.RotorcraftWaypoint"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-            "morse.actuators.rotorcraft_waypoint.RotorcraftWaypoint",
-            "rotorcraft_waypoint")
+        ActuatorCreator.__init__(self, name)
 
 class StabilizedQuadrotor(ActuatorCreator):
+    _classpath = "morse.actuators.stabilized_quadrotor.StabilizedQuadrotor"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-            "morse.actuators.stabilized_quadrotor.StabilizedQuadrotor",
-            "stabilized_quadrotor")
+        ActuatorCreator.__init__(self, name)
 
 class SteerForce(ActuatorCreator):
+    _classpath = "morse.actuators.steer_force.SteerForce"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.steer_force.SteerForce",
-                                 "steer_force")
+        ActuatorCreator.__init__(self, name)
 
 class Teleport(ActuatorCreator):
+    _classpath = "morse.actuators.teleport.Teleport"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.teleport.Teleport",
-                                 "teleport")
+        ActuatorCreator.__init__(self, name)
 
 class MotionVW(ActuatorCreator):
+    _classpath = "morse.actuators.v_omega.MotionVW"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.v_omega.MotionVW",
-                                 "v_omega")
+        ActuatorCreator.__init__(self, name)
 
 class MotionVWDiff(ActuatorCreator):
+    _classpath = "morse.actuators.v_omega_diff_drive.MotionVWDiff"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-            "morse.actuators.v_omega_diff_drive.MotionVWDiff",
-            "v_omega_diff_drive")
+        ActuatorCreator.__init__(self, name)
 
 class Waypoint(ActuatorCreator):
+    _classpath = "morse.actuators.waypoint.Waypoint"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.waypoint.Waypoint", "waypoint")
+        ActuatorCreator.__init__(self, name)
         self.properties(Target = "")
         # append 2 Radar with logic
         self.add_lr_radars()
@@ -184,17 +192,16 @@ class Waypoint(ActuatorCreator):
         controller.link(sensor = sensor, actuator = actuator)
 
 class MotionXYW(ActuatorCreator):
+    _classpath = "morse.actuators.xy_omega.MotionXYW"
+
     def __init__(self, name=None):
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.xy_omega.MotionXYW",
-                                 "xy_omega")
+        ActuatorCreator.__init__(self, name)
 
 class Light(ActuatorCreator):
+    _classpath = "morse.actuators.light.Light"
     def __init__(self, name=None):
         self.light = None
-        ActuatorCreator.__init__(self, name,
-                                 "morse.actuators.light.Light",
-                                 "light")
+        ActuatorCreator.__init__(self, name)
         self.light = Spot("LightSpot")
         self.append(self.light)
         self.properties(Emit=True)
@@ -213,9 +220,10 @@ class Light(ActuatorCreator):
                     spot.color = tuple(int(v) for v in re.findall("[0-9]+", kwargs['color']))
 
 class Sound(ActuatorCreator):
+    _classpath = "morse.actuators.sound.Sound"
+
     def __init__(self, name=None):
         ActuatorCreator.__init__(self, name)
-        self.properties(classpath="morse.actuators.sound.Sound")
         self.properties(mode="play")
         #self.select()
         bpymorse.add_actuator(type="SOUND", name="MORSE_SOUND")
@@ -231,5 +239,120 @@ class Sound(ActuatorCreator):
         actuator.sound = bpymorse.get_last_sound()
         actuator.use_sound_3d = True
         actuator.distance_3d_max = 10000.0
+
+class Armature(ActuatorCreator):
+    _classpath = "morse.actuators.armature.Armature"
+
+    def __init__(self, name = None, armature_name = None, model_name = None):
+        """ Initialize an armature
+
+        Either `armature_name` or `model_name` or both must be specified.
+        
+
+        :param armature_name: Armature object name
+        :param model_name: Armature model name, if any
+        """
+        
+        if not armature_name and not model_name:
+            raise MorseBuilderError("You need to specify either the name of " \
+                    "an armature or a Blender model in order to create an " \
+                    "armature actuator.")
+
+        if model_name:
+            ActuatorCreator.__init__(self, 
+                                    name, 
+                                    action = ComponentCreator.USE_BLEND,
+                                    blendfile = model_name,
+                                    blendobject = armature_name,
+                                    make_morseable = True)
+
+        else:
+            ActuatorCreator.__init__(self, 
+                                name, 
+                                action = ComponentCreator.LINK_EXISTING_OBJECT,
+                                blendobject = armature_name,
+                                make_morseable = True)
+
+
+        self.ik_targets = []
+
+        # the user may have created IK constraints on the armature, without
+        # setting an IK target. In that case, we add such a target
+        for bone in self._bpy_object.pose.bones:
+            for c in bone.constraints:
+                if c.type == 'IK' and c.ik_type == 'DISTANCE':
+                    if not c.target:
+                        self.create_ik_targets([bone.name])
+
+    def _get_posebone(self, bone_name):
+        """ Returns a given PoseBone in the armature.
+
+        If the joint does not exist, throw an exception.
+        """
+        armature = self._bpy_object
+
+        if bone_name not in [c.name for c in armature.pose.bones]:
+            msg = "Joint <%s> does not exist in model %s." % (bone_name, armature.name)
+            msg += " Did you add a skeleton to your model in MakeHuman?"
+            raise MorseBuilderError(msg)
+
+        return armature.pose.bones[bone_name]
+
+    def create_ik_targets(self, bones):
+
+        # Bug with iTaSC! cf http://developer.blender.org/T37894
+        if bpymorse.version() < (2, 70, 0):
+            if self._bpy_object.pose.ik_solver == 'ITASC':
+                logger.warn("Due to a bug in Blender (T37894), only the standard " \
+                            "IK solver can be used with IK targets. Switching " \
+                            "from iTaSC to standard IK solver.")
+                self._bpy_object.pose.ik_solver = 'LEGACY'
+
+        for target in bones:
+            posebone = self._get_posebone(target)
+            bpymorse.add_morse_empty("ARROWS")
+            empty = bpymorse.get_first_selected_object()
+            empty.scale = [0.01, 0.01, 0.01]
+
+            empty.matrix_local = posebone.bone.matrix_local
+            empty.location = posebone.bone.tail_local
+
+            existing_ik = [c for c in posebone.constraints if c.type == 'IK']
+            if len(existing_ik) == 1:
+                ik_constraint = existing_ik[0]
+            elif existing_ik:
+                raise MorseBuilderError("Bone %s has several IK constraints." \
+                        "MORSE supports only one IK constraint per bone. Please " \
+                        "remove other ones.")
+            else:
+                ik_constraint = posebone.constraints.new("IK")
+
+            ik_constraint.ik_type = "DISTANCE"
+            ik_constraint.use_rotation = True
+            ik_constraint.use_tail = True
+            ik_constraint.target = empty
+
+            self.ik_targets.append((empty, target))
+
+
+    def after_renaming(self):
+        for empty, target in self.ik_targets:
+            empty.name = "ik_target." + self.name + "." + target
+
+class KukaLWR(Armature):
+    """
+    This actuator provides a KUKA LWR mesh with the associated kinematic chain.
+
+    An IK target is available on the last join, allowing for cartesian control of
+    the arm.
+
+    See :doc:`the general documentation on armatures <../actuators/armature>` for details.
+    """
+    _name = "KUKA LWR"
+    _short_desc="7DoF KUKA Lightweight Robotic Arm (LWR)"
+
+    def __init__(self, name=None):
+        Armature.__init__(self, name, model_name = "kuka_lwr")
+        self.create_ik_targets(["kuka_7"])
 
 # end morse.builder.actuators

@@ -1,6 +1,7 @@
 import logging; logger = logging.getLogger("morserobots." + __name__)
 from morse.builder import bpymorse
-from morse.builder import Armature, GroundRobot
+from morse.builder import GroundRobot
+from morse.builder.actuators import Armature
 from morse.builder.sensors import ArmaturePose
 
 class Human(GroundRobot):
@@ -44,7 +45,7 @@ class Human(GroundRobot):
             self.properties(classpath="morse.robots.human.Human")
 
         try:
-            self.armature = Armature("HumanArmature" + self.suffix)
+            self.armature = Armature(armature_name = "HumanArmature" + self.suffix)
             self.append(self.armature)
         except KeyError:
             logger.error("Could not find the human armature! (I was looking " +\

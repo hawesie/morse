@@ -44,30 +44,21 @@ class Transformation3d:
         """
         Return the translation along the x-axis
         """
-        if blenderapi.version() < (2, 62, 0):
-            return self.matrix[3][0]
-        else:
-            return self.matrix[0][3]
+        return self.matrix[0][3]
 
     @property
     def y(self):
         """
         Return the translation along the y-axis
         """
-        if blenderapi.version() < (2, 62, 0):
-            return self.matrix[3][1]
-        else:
-            return self.matrix[1][3]
+        return self.matrix[1][3]
 
     @property
     def z(self):
         """
         Return the translation along the z-axis
         """
-        if blenderapi.version() < (2, 62, 0):
-            return self.matrix[3][2]
-        else:
-            return self.matrix[2][3]
+        return self.matrix[2][3]
 
     @property
     def yaw(self):
@@ -97,6 +88,13 @@ class Transformation3d:
         """
         return self.matrix.to_quaternion()
 
+    @rotation.setter
+    def rotation(self, value):
+        rmat = value.to_matrix()
+        for i in range(0, 3):
+            self.matrix[i][0:3] = rmat[i][0:3]
+        self.euler = self.matrix.to_euler()
+
     @property
     def rotation_matrix(self):
         """
@@ -106,7 +104,12 @@ class Transformation3d:
 
     @property
     def translation(self):
-        return mathutils.Vector((self.x, self.y, self.z))
+        return self.matrix.translation
+
+    @translation.setter
+    def translation(self, value):
+        self.matrix.translation = value
+
 
     def transformation3d_with(self, t3d):
         """
@@ -155,10 +158,7 @@ class Transformation3d:
 
         pos = obj.worldPosition
         for i in range(0, 3):
-            if blenderapi.version() < (2, 62, 0):
-                self.matrix[3][i] = pos[i]
-            else:
-                self.matrix[i][3] = pos[i]
+            self.matrix[i][3] = pos[i]
         self.matrix[3][3] = 1
 
         self.euler = self.matrix.to_euler()
@@ -178,10 +178,7 @@ class Transformation3d:
 
         pos = obj.worldPosition
         for i in range(0, 3):
-            if blenderapi.version() < (2, 62, 0):
-                self.matrix[3][i] = pos[i]
-            else:
-                self.matrix[i][3] = pos[i]
+            self.matrix[i][3] = pos[i]
         self.matrix[3][3] = 1
 
         self.euler = self.matrix.to_euler()

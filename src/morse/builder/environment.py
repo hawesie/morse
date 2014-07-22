@@ -1,6 +1,7 @@
 import logging; logger = logging.getLogger("morsebuilder." + __name__)
 import os
 import json
+from morse.core import mathutils
 from morse.builder.morsebuilder import *
 from morse.builder.abstractcomponent import Configuration
 from morse.core.morse_time import TimeStrategies
@@ -55,6 +56,8 @@ class Environment(Component):
         # Init. camera's properties
         self.set_camera_speed()
         self.set_camera_clip()
+
+        self.set_gravity()
 
     def is_internal_camera(self, camera):
         return not self._multinode_configured or \
@@ -152,9 +155,10 @@ class Environment(Component):
         for component in AbstractComponent.components:
             if isinstance(component, Robot) and component.default_interface:
                 for child in component.children:
-                    if child.is_morseable():
+                    if child.is_morseable(): 
                         if not Configuration.has_datastream_configuration(
-                                child, component.default_interface):
+                                child, component.default_interface) and \
+                            child.is_exportable():
                             child.add_stream(component.default_interface)
                         if not Configuration.has_service_configuration(
                                 child, component.default_interface):
@@ -278,7 +282,13 @@ class Environment(Component):
         self.properties(**_properties)
 
         # Write the configuration of the datastreams, and node configuration
-        Configuration.write_config()
+        if not self.multinode_distribution:
+            robot_list = None
+        else:
+            robot_list = self.multinode_distribution.get(self._node_name, [])
+            if not isinstance(robot_list, list):
+                robot_list = [robot_list]
+        Configuration.write_config(robot_list)
         self._write_multinode(self._node_name)
 
         # Change the Screen material
@@ -383,6 +393,7 @@ class Environment(Component):
         """
         if isinstance(gravity, float):
             bpymorse.get_context_scene().game_settings.physics_gravity = gravity
+            bpymorse.get_context_scene().gravity = mathutils.Vector((0.0, 0.0, -gravity))
 
     def set_material_mode(self, material_mode='GLSL'):
         """ Material mode to use for rendering
