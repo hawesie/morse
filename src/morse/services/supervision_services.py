@@ -349,6 +349,17 @@ class Supervision(AbstractObject):
     def action(self):
         pass
 
+    @service
+    def transform_to_obj_frame(self, object_name, point):
+        """ Transforms a 3D point with respect to the origin into the coordinate
+        frame of an object and returns the global coordinates.
+        
+        :param string object_name: The name of the object.
+        :param string point: coordinates as a list "[x, y, z]"
+        """
+        # Test whether the object exists in the scene  
+        b_obj = get_obj_by_name(object_name)
+
 @service(component="simulation")
 def set_object_visibility(object_name, visible, do_children):
     """ Set the visibility of an object in the simulation.
