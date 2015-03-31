@@ -415,7 +415,7 @@ class Supervision(AbstractObject):
         return json.dumps(obj_type)
 
     @service
-    def transform_to_obj_frame(object_name, point):
+    def transform_to_obj_frame(self, object_name, point):
         """ Transforms a 3D point with respect to the origin into the coordinate
         frame of an object and returns the global coordinates.
         
