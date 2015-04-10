@@ -24,10 +24,11 @@ in the folder ``MORSE_COMPONENTS/robots/``.
 """
 
 # Override the default Python exception handler
-sys_excepthook = sys.excepthook
 def morse_excepthook(*args, **kwargs):
     logger.error("[ERROR][MORSE] Uncaught exception, quit Blender.", exc_info = tuple(args))
-    sys_excepthook(*args, **kwargs)
+    # call default python exception hook
+    # on Ubuntu/Python3.4 sys.excepthook is overriden by `apport_excepthook`
+    sys.__excepthook__(*args, **kwargs)
     import os
     os._exit(-1)
 
@@ -213,6 +214,20 @@ class Robot(Component):
         self._bpy_object.game.use_collision_bounds = True
         self._bpy_object.game.collision_bounds_type = 'CONVEX_HULL'
         self._bpy_object.game.use_collision_compound = True
+
+    def make_grasper(self, obj_name):
+        obj = bpymorse.get_object(obj_name)
+        bpymorse.select_only(obj)
+        bpymorse.add_sensor(type = 'NEAR')
+        sens = obj.game.sensors[-1]
+        sens.name = 'Near'
+        sens.distance = 5.0
+        sens.reset_distance = 0.075
+        sens.property = "Graspable"
+        bpymorse.add_controller()
+        contr = obj.game.controllers[-1]
+        contr.link(sensor = sens)
+
 
 class GroundRobot(Robot):
     def __init__(self, filename, name):

@@ -1,6 +1,6 @@
 import logging; logger = logging.getLogger("morsebuilder." + __name__)
 import os
-import json
+import pprint
 import copy
 
 from morse.builder import bpymorse
@@ -11,6 +11,7 @@ from morse.helpers.loading import get_class, load_module_attribute
 
 class Configuration(object):
     datastream = {}
+    stream_manager = {}
     modifier = {}
     service = {}
     overlay = {}
@@ -50,6 +51,9 @@ class Configuration(object):
     def link_overlay(component,  manager, overlay_cfg, kwargs):
         Configuration.overlay.setdefault(manager, {})[component.name] = [overlay_cfg, kwargs]
 
+    def link_stream_manager_config(manager, kwargs):
+        Configuration.stream_manager.setdefault(manager, {}).update(kwargs)
+
     def has_datastream_configuration(component, stream):
         try:
             confs = Configuration.datastream[component.name]
@@ -88,22 +92,21 @@ class Configuration(object):
             bpymorse.get_last_text().name = 'component_config.py'
         cfg = bpymorse.get_text('component_config.py')
         cfg.clear()
-        cfg.write('component_datastream = ' + json.dumps(
-            Configuration._remove_entries(Configuration.datastream, robot_list),
-            indent=1) )
+        cfg.write('component_datastream = ' + pprint.pformat(
+            Configuration._remove_entries(Configuration.datastream, robot_list)))
         cfg.write('\n')
-        cfg.write('component_modifier = ' + json.dumps(
-            Configuration._remove_entries(Configuration.modifier, robot_list),
-            indent=1) )
+        cfg.write('component_modifier = ' + pprint.pformat(
+            Configuration._remove_entries(Configuration.modifier, robot_list)))
         cfg.write('\n')
-        cfg.write('component_service = ' + json.dumps(
-            Configuration._remove_entries(Configuration.service, robot_list),
-            indent=1) )
+        cfg.write('component_service = ' + pprint.pformat(
+            Configuration._remove_entries(Configuration.service, robot_list)))
         cfg.write('\n')
         cleaned_overlays = {}
         for k, v in Configuration.overlay.items():
             cleaned_overlays[k] = Configuration._remove_entries(v, robot_list)
-        cfg.write('overlays = ' + json.dumps(cleaned_overlays, indent=1) )
+        cfg.write('overlays = ' + pprint.pformat(cleaned_overlays))
+        cfg.write('\n')
+        cfg.write('stream_manager = ' + pprint.pformat(Configuration.stream_manager))
         cfg.write('\n')
 
 class AbstractComponent(object):
@@ -308,7 +311,7 @@ class AbstractComponent(object):
         component can make several calls to this function to add bindings with
         more than one middleware.
 
-        :param datastream: enum in ['ros', 'socket', 'yarp', 'text', 'pocolibs']
+        :param datastream: enum in ['ros', 'socket', 'yarp', 'text', 'pocolibs', 'moos']
         :param classpath: if set, force to use the configuration of the given
                           component, instead of our own (default=None).
 
@@ -318,6 +321,7 @@ class AbstractComponent(object):
         .. code-block:: python
 
             component.add_stream('ros', topic='/myrobots/data')
+            component.add_stream('moos', moos_host=127.0.0.1, moos_port=9000, moos_freq=10)
 
         """
         self._err_if_not_exportable()
@@ -467,7 +471,7 @@ class AbstractComponent(object):
         if self._exportable:
             self.add_stream(interface, **kwargs)
 
-    def alter(self, modifier_name, classpath=None, **kwargs):
+    def alter(self, modifier_name=None, classpath=None, **kwargs):
         """ Add a modifier specified by its first argument to the component """
         # Configure the modifier for this component
         config = []
@@ -624,19 +628,23 @@ class AbstractComponent(object):
                              "or default path, typically $PREFIX/share/morse/data)."% (component, looked_dirs))
                 raise FileNotFoundError("%s '%s' not found"%(self.__class__.__name__, component))
 
-        if not objects: # link_append all objects from blend file
+        if not objects: # append all objects from blend file
             objects = bpymorse.get_objects_in_blend(filepath)
 
         if prefix: # filter (used by PassiveObject)
             objects = [obj for obj in objects if obj.startswith(prefix)]
 
-        # Format the objects list for link_append
+        # Format the objects list to append
         objlist = [{'name':obj} for obj in objects]
 
         bpymorse.deselect_all()
         # Append the objects to the scene, and (auto)select them
-        bpymorse.link_append(directory=filepath + '/Object/', link=False,
-                             autoselect=True, files=objlist)
+        if bpymorse.version() >= (2, 71, 6):
+            bpymorse.append(directory=filepath + '/Object/',
+                            autoselect=True, files=objlist)
+        else:
+            bpymorse.link_append(directory=filepath + '/Object/', link=False,
+                                 autoselect=True, files=objlist)
 
         return bpymorse.get_selected_objects()
 

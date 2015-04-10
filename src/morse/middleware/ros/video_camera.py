@@ -2,24 +2,33 @@ import logging; logger = logging.getLogger("morse." + __name__)
 import roslib; roslib.load_manifest('sensor_msgs'); roslib.load_manifest('rospy')
 import rospy
 from sensor_msgs.msg import Image, CameraInfo
-from morse.middleware.ros import ROSPublisherTF
+from morse.middleware.ros import ROSPublisher, ROSPublisherTF
 
-class VideoCameraPublisher(ROSPublisherTF):
+class CameraPublisher(ROSPublisherTF):
     """ Publish the image from the Camera perspective.
     And send the intrinsic matrix information in a separate topic of type
     `sensor_msgs/CameraInfo <http://ros.org/wiki/rviz/DisplayTypes/Camera>`_.
     """
     ros_class = Image
+    encoding = 'tbd'
+    pub_tf = True
 
     def initialize(self):
         if not 'topic_suffix' in self.kwargs:
             self.kwargs['topic_suffix'] = '/image'
-        ROSPublisherTF.initialize(self)
+        self.pub_tf = self.kwargs.get('pub_tf', True)
+        if self.pub_tf:
+            ROSPublisherTF.initialize(self)
+        else:
+            ROSPublisher.initialize(self)
         # Generate a publisher for the CameraInfo
         self.topic_camera_info = rospy.Publisher(self.topic_name+'/camera_info', CameraInfo)
 
     def finalize(self):
-        ROSPublisherTF.finalize(self)
+        if self.pub_tf:
+            ROSPublisherTF.finalize(self)
+        else:
+            ROSPublisher.finalize(self)
         # Unregister the CameraInfo topic
         self.topic_camera_info.unregister()
 
@@ -33,8 +42,6 @@ class VideoCameraPublisher(ROSPublisherTF):
         image.header = self.get_ros_header()
         image.height = self.component_instance.image_height
         image.width = self.component_instance.image_width
-        #image.encoding = 'rgba8'
-        #image.step = image.width * 4
         image.encoding = 'rgb8'
         image.step = image.width * 3
 
@@ -62,5 +69,15 @@ class VideoCameraPublisher(ROSPublisherTF):
                          intrinsic[1][0], intrinsic[1][1], intrinsic[1][2], Ty,
                          intrinsic[2][0], intrinsic[2][1], intrinsic[2][2], 0]
 
-        self.publish_with_robot_transform(image)
+        if self.pub_tf:
+            self.publish_with_robot_transform(image)
+        else:
+            self.publish(image)
         self.topic_camera_info.publish(camera_info)
+
+class VideoCameraPublisher(CameraPublisher):
+    encoding = 'rgba8'
+
+class DepthCameraPublisher(CameraPublisher):
+    encoding = '32FC1'
+

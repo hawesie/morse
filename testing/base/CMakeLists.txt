@@ -8,7 +8,9 @@ add_morse_test(levels)
 
 # Sensor
 
+add_morse_test(accelerometer_testing)
 add_morse_test(armature_pose_testing)
+add_morse_test(barometer_testing)
 add_morse_test(battery_testing)
 add_morse_test(depth_camera_testing)
 add_morse_test(gps_testing)
@@ -16,6 +18,7 @@ add_morse_test(gyroscope_testing)
 add_morse_test(odometry_testing)
 add_morse_test(pose_testing)
 add_morse_test(proximity_testing)
+add_morse_test(radar_altimeter_testing)
 add_morse_test(sick_testing)
 add_morse_test(semantic_camera_testing)
 add_morse_test(semantic_camera_tag_testing)

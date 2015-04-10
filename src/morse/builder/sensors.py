@@ -19,6 +19,12 @@ class ArmaturePose(SensorCreator):
     def __init__(self, name=None):
         SensorCreator.__init__(self, name)
 
+class Barometer(SensorCreator):
+    _classpath = "morse.sensors.barometer.Barometer"
+
+    def __init__(self, name=None):
+        SensorCreator.__init__(self, name)
+
 class Battery(SensorCreator):
     _classpath = "morse.sensors.battery.Battery"
 
@@ -73,7 +79,7 @@ class Gyroscope(SensorCreator):
         mesh.color(.8, .4, .1)
         self.append(mesh)
 
-class IMU(SensorCreator): 
+class IMU(SensorCreator):
     _classpath = "morse.sensors.imu.IMU"
 
     def __init__(self, name=None):
@@ -384,8 +390,6 @@ class Infrared(LaserSensorWithArc):
                 scan_window = 20.0, resolution = 1.0)
         # set the frequency to 10 Hz
         self.frequency(10)
-        # create default Arc_
-        self.create_laser_arc()
 
 class Velocity(SensorCreator):
     _classpath = "morse.sensors.velocity.Velocity"
@@ -424,10 +428,16 @@ class VideoCamera(SensorCreator):
         # looking in +X
         SensorCreator.rotate(self, x=math.pi/2, z=math.pi/2)
         # append CameraMesh with its textures
-        self.append_meshes(['CameraMesh'], "camera")
+        self.mesh = self.append_meshes(['CameraMesh'], "camera")[0]
         self.rotate(z=math.pi)
     def rotate(self, x=0, y=0, z=0):
         SensorCreator.rotate(self, x=y, y=z, z=x)
+    def hide_mesh(self, hide=True):
+        """ Hide the camera mesh
+
+        Can be used to hide a third person camera attached to a robot.
+        """
+        self.mesh.hide_render = hide
 
 class DepthCamera(VideoCamera):
     _classpath = "morse.sensors.depth_camera.DepthCamera"
@@ -444,7 +454,13 @@ class Velodyne(DepthCamera):
 
     def __init__(self, name=None):
         DepthCamera.__init__(self, name)
+        self.camera.properties(NOT_F9_ABLE=1)
         self.properties(rotation=self.camera._bpy_object.data.angle)
+        self.mesh = self.append_meshes(['VelodyneMesh'])[0]
+        self.mesh.rotation_euler.x = math.pi / 2
+        self.mesh.rotation_euler.y = -math.pi / 2
+        self.mesh.scale = [1.1]*3
+
 
 VelodyneZB = Velodyne # morse 1.1 compatible
 
@@ -481,7 +497,7 @@ class Clock(SensorCreator):
     def __init__(self, name=None):
         SensorCreator.__init__(self, name)
 
-class Kinect(SensorCreator):
+class Kinect(CompoundSensor):
     """
     Microsoft Kinect RGB-D camera, implemented as a pair of depth camera and video
     camera.
@@ -496,7 +512,7 @@ class Kinect(SensorCreator):
 
     def __init__(self, name="Kinect"):
         # meta sensor composed of 2 cameras (rgb and depth)
-        SensorCreator.__init__(self, name)
+        CompoundSensor.__init__(self, [], name)
         mesh = Cube("KinectMesh")
         mesh.scale = (.02, .1, .02)
         mesh.color(.8, .8, .8)
@@ -511,6 +527,7 @@ class Kinect(SensorCreator):
         # TODO find Kinect spec for cameras positions
         self.video_camera.location = (.06, +.08, .04)
         self.depth_camera.location = (.06, -.08, .04)
+        self.sensors = [self.video_camera, self.depth_camera]
     def add_stream(self, *args, **kwargs):
         # Override AbstractComponent method
         self.video_camera.add_stream(*args, **kwargs)
@@ -557,3 +574,9 @@ class Collision(SensorCreator):
                 sensor.property = kwargs['collision_property']
             except KeyError:
                 pass
+
+class RadarAltimeter(SensorCreator):
+    _classpath = "morse.sensors.radar_altimeter.RadarAltimeter"
+
+    def __init__(self, name=None):
+        SensorCreator.__init__(self, name)

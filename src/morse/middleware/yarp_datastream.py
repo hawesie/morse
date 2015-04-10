@@ -90,41 +90,6 @@ class YarpPublisher(YarpPort):
         for data in self.data.values():
             self.encode_message(bottle, data, self.component_name)
 
-class YarpImagePublisher(YarpPort):
-
-    _type_name = "yarp::ImageRGBA"
-
-    def initialize(self):
-        YarpPort.initialize(self, yarp.BufferedPortImageRgba, False)
-
-    def default(self, ci):
-        # Wrap the data in a YARP image
-        img = yarp.ImageRgba()
-        img.setTopIsLowIndex(0)
-        img.setQuantum(1)
-
-        # Get the image data from the camera instance
-        img_string = self.data['image']
-        img_X = self.component_instance.image_width
-        img_Y = self.component_instance.image_height
-
-        # Check that an image exists:
-        if img_string is not None and img_string != '':
-            try:
-                data = img_string
-                # Pass the data as is, from the bge.texture module
-                # NOTE: This requires the patch to yarp-python bindings
-                img.setExternal(data,img_X,img_Y)
-            except TypeError as detail:
-                logger.info("No image yet: %s" % detail)
-
-            # Copy to image with "regular" YARP pixel order
-            # Otherwise the image is upside-down
-            img2 = self.port.prepare()
-            img2.copy(img)
-
-            # Write the image
-            self.port.write()
 
 class YarpReader(YarpPort):
     _type_name = "yarp::Bottle"
@@ -164,17 +129,12 @@ class YarpReader(YarpPort):
 class YarpDatastreamManager(DatastreamManager):
     """ Handle communication between Blender and YARP."""
 
-    def __init__(self):
+    def __init__(self, args, kwargs):
         """ Initialize the network and connect to the yarp server."""
         # Call the constructor of the parent class
-        DatastreamManager.__init__(self)
+        DatastreamManager.__init__(self, args, kwargs)
 
         yarp.Network.init()
-
-
-    def __del__(self):
-        """ Close all open YARP ports. """
-        self.finalize()
 
     def finalize(self):
         """ Close all currently opened ports and release the network."""

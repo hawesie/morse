@@ -29,15 +29,57 @@ Sensors
 - Laser Scanner sensors gain the possibility to return also a
   remission value at the `rssi` level.
 
+- Introduce the new sensor "Radar Altimeter", allowing to retrieve the
+  distance to the ground.
+
+- Improvement of Acceleromter, IMU and Velocity sensor.  They now works
+  properly with robots with or without physics, and returns properly
+  information in the sensor frame.  The computation method is configurable
+  using the `ComputationMode` property, counterpart of the `ControlType` in
+  several actuators.
+
+- Introduce the new sensor "Barometer" allowing to compute the atmospheric pressure.
+
 Middlewares
 -----------
+
+General
++++++++
+
+- Each datastream manager now get an action handler, allowing them to run some
+  specific middleware behaviour once by simulation turn.
 
 Socket
 ++++++
 
 - Socket middleware now accepts the keyword 'port' to specify on which port
   you want the socket binds itself.
+  
+Moos
+++++
 
+- Support for Moos has been enhanced, allowing to use multiples Moos nodes.
+  Moreover, it supports additional actuators such as teleport or light
+  actuator.
+
+HLA
++++
+
+- HLA can be now used as a general purpose middleware, i.e. it is possible to
+  import / export any actuator / sensor using the HLA interface. Through, for
+  moment, no Simulation Object Model (SOM) has been formally defined for
+  Morse.
+
+Builder API
+-----------
+
+API addition
+++++++++++++
+
+- Add a method Environment.configure_stream_manager allowing to pass
+  option/information to each datastream manager.
+It is now possible to control the mist settings in Morse, using
+  Environment.enable_mist`` and ``Environment.set_mist_settings.
 
 MORSE 1.2
 =========

@@ -32,6 +32,8 @@ add_sensor = empty_method
 add_controller = empty_method
 add_actuator = empty_method
 link_append = empty_method
+link = empty_method # 2.71.6
+append = empty_method # 2.71.6
 collada_import = empty_method
 add_object = empty_method
 add_empty = empty_method
@@ -60,7 +62,11 @@ if bpy:
     add_sensor = bpy.ops.logic.sensor_add
     add_controller = bpy.ops.logic.controller_add
     add_actuator = bpy.ops.logic.actuator_add
-    link_append = bpy.ops.wm.link_append
+    if bpy.app.version >= (2, 71, 6):
+        link = bpy.ops.wm.link
+        append = bpy.ops.wm.append
+    else: # link_append dropped in 2.71.6
+        link_append = bpy.ops.wm.link_append
     collada_import = bpy.ops.wm.collada_import
     add_object = bpy.ops.object.add
     if bpy.app.version >= (2, 65, 0):
@@ -399,12 +405,15 @@ def set_viewport_perspective(perspective='CAMERA'):
                 if space.type == 'VIEW_3D':
                     space.region_3d.view_perspective = perspective
 
-def fullscreen(fullscreen=True):
+def fullscreen(fullscreen=True, desktop=True):
     """ Run the simulation fullscreen
 
     :param fullscreen: Start player in a new fullscreen display
     :type  fullscreen: Boolean, default: True
+    :param desktop: Use the current desktop resolution in fullscreen mode
+    :type  desktop: Boolean, default: True
     """
     if not bpy:
         return
     bpy.context.scene.game_settings.show_fullscreen = fullscreen
+    bpy.context.scene.game_settings.use_desktop = desktop

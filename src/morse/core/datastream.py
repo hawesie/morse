@@ -44,7 +44,10 @@ class DatastreamManager(object):
     # Make this an abstract class
     __metaclass__ = ABCMeta
 
-    def __del__(self):
+    def __init__(self, args, kwargs):
+        pass
+
+    def finalize(self):
         """ Destructor method. """
         logger.info("Closing datastream interface <%s>." % self.__class__.__name__)
 
@@ -59,4 +62,8 @@ class DatastreamManager(object):
         return register_datastream(datastream_classpath, component_instance,
                                                          datastream_args)
 
+
+    def action(self):
+        """ Main action, called each simulation round """
+        pass
 

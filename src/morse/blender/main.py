@@ -23,10 +23,11 @@ from morse.core.morse_time import TimeStrategies
 from morse.core.zone import ZoneManager
 
 # Override the default Python exception handler
-sys_excepthook = sys.excepthook
 def morse_excepthook(*args, **kwargs):
     logger.error("[ERROR][MORSE] Uncaught exception, quit Blender.", exc_info = tuple(args))
-    sys_excepthook(*args, **kwargs)
+    # call default python exception hook
+    # on Ubuntu/Python3.4 sys.excepthook is overriden by `apport_excepthook`
+    sys.__excepthook__(*args, **kwargs)
     import os
     os._exit(-1)
 
@@ -101,7 +102,7 @@ def _associate_child_to_robot(obj, robot_instance, unset_default):
                                      + obj.name + " is an External robot.")
         else:
             logger.info("Component %s %s added to %s" %
-                        (child.name, 
+                        (child.name,
                          "(level: %s)" % child.get("abstraction_level") \
                                  if child.get("abstraction_level") else "",
                          obj.name)
@@ -136,7 +137,7 @@ def create_dictionaries ():
     persistantstorage.modifierDict = {}
 
     # Create a dictionary with the datastream interfaces used
-    persistantstorage.datastreamDict = {}
+    persistantstorage.stream_managers = {}
 
     # this dictionary stores, for each components, the direction and the
     # configured datastream interfaces. Direction is 'IN' for streams
@@ -197,7 +198,7 @@ def create_dictionaries ():
                              "using the new builder classes"%str(obj.name))
                 return False
             # Create an object instance and store it
-            instance = create_instance_level(obj['classpath'], 
+            instance = create_instance_level(obj['classpath'],
                                              obj.get('abstraction_level'),
                                              obj)
 
@@ -221,17 +222,17 @@ def create_dictionaries ():
     for obj in scene.objects:
         if 'Zone_Tag' in obj:
             persistantstorage.zone_manager.add(obj)
-    
+
     # Get the robot and its instance
     for obj, robot_instance in persistantstorage.robotDict.items():
         if not _associate_child_to_robot(obj, robot_instance, False):
             return False
-    
+
     # Get the external robot and its instance
     for obj, robot_instance in persistantstorage.externalRobotDict.items():
         if not _associate_child_to_robot(obj, robot_instance, True):
             return False
-  
+
     # Check we have no 'free' component (they all must belong to a robot)
     for obj in scene.objects:
         try:
@@ -243,7 +244,7 @@ def create_dictionaries ():
                 return False
         except KeyError as detail:
             pass
-    
+
     # Will return true always (for the moment)
     return True
 
@@ -286,31 +287,13 @@ def check_dictionaries():
 
     logger.info ("")
 
-    if persistantstorage.datastreamDict:
+    if persistantstorage.stream_managers:
         logger.info ("Datastream interfaces configured:")
-        for obj, datastream_variables in persistantstorage.datastreamDict.items():
-            logger.info ("\t- '{0}'".format(obj))
+        for key in persistantstorage.stream_managers.keys():
+            logger.info ("\t- '%s'" % key)
 
     logger.info("------------------------------------")
     logger.info ("")
-
-
-def get_components_of_type(classname):
-    components = []
-    for component in persistantstorage.componentDict.values():
-        logger.debug("Get component for class " + component.name() + ": " + component.__class__.__name__)
-        if component.__class__.__name__ == classname:
-            components.append(component)
-    
-    return components
-
-
-def get_datastream_of_type(classname):
-    for datastream_instance in persistantstorage.datastreamDict.values():
-        if datastream_instance.__class__.__name__ == classname:
-            return datastream_instance
-    return None
-    
 
 def link_datastreams():
     """ Read the configuration script (inside the .blend file)
@@ -361,7 +344,7 @@ def link_datastreams():
         else:
             assert False
 
-        persistantstorage.datastreams[component_name] = (direction, 
+        persistantstorage.datastreams[component_name] = (direction,
                                      [d[0] for d in datastream_list])
 
         # Register all datastream's in the list
@@ -369,21 +352,20 @@ def link_datastreams():
 
             datastream_name = datastream_data[0]
             logger.info("Component: '%s' using datastream '%s'" % (component_name, datastream_name))
-            found = False
-            missing_component = False
-            
-            # Look for the listed datastream in the dictionary of active datastream's
-            for datastream_obj, datastream_instance in persistantstorage.datastreamDict.items():
-                logger.debug("Looking for '%s' in '%s'" % (datastream_name, datastream_obj))
-                if datastream_name in datastream_obj:
-                    found = True
-                    # Make the datastream object take note of the component
-                    break
 
-            if not found:
-                datastream_instance = create_instance(datastream_name)
-                if datastream_instance is not None:
-                    persistantstorage.datastreamDict[datastream_name] = datastream_instance
+            # Look for the listed datastream in the dictionary of active datastream's
+            datastream_instance = persistantstorage.stream_managers.get(datastream_name, None)
+            if not datastream_instance:
+                kwargs = component_config.stream_manager.get(datastream_name, {})
+                try:
+                    datastream_instance = create_instance(datastream_name, None, kwargs)
+                except Exception as e:
+                    logger.error("Catched exception %s in the construction of %s" %
+                                 (e, datastream_name))
+                    return False
+
+                if datastream_instance:
+                    persistantstorage.stream_managers[datastream_name] = datastream_instance
                     logger.info("\tDatastream interface '%s' created" % datastream_name)
                 else:
                     logger.error("INITIALIZATION ERROR: Datastream '%s' module"
@@ -391,11 +373,11 @@ def link_datastreams():
                                  " Could not import modules required for the "
                                  "desired datastream interface. Check that "
                                  "they can be found inside your PYTHONPATH "
-                                 "variable.")
+                                 "variable." % datastream_name)
                     return False
-            
+
             datastream_instance.register_component(component_name, instance, datastream_data)
-            
+
     # Will return true always (for the moment)
     return True
 
@@ -413,7 +395,7 @@ def link_services():
 
     for component_name, request_manager_data in component_list.items():
         # Get the instance of the object
-        
+
         if component_name == "simulation": # Special case for the pseudo-component 'simulation'
             continue
 
@@ -438,19 +420,19 @@ def link_services():
             # Load required request managers
             if not persistantstorage.morse_services.add_request_manager(request_manager):
                 return False
-            
+
             persistantstorage.morse_services.register_request_manager_mapping(component_name, request_manager)
             instance.register_services()
             logger.info("Component: '%s' using middleware '%s' for services" %
                         (component_name, request_manager))
-    
+
     return True
 
 
 def load_overlays():
     """ Read and initialize overlays from the configuration script.
     """
-    
+
     try:
         overlays_list = component_config.overlays
     except (AttributeError, NameError) as detail:
@@ -560,7 +542,7 @@ def init(contr):
 
     Here, all components, modifiers and middlewares are initialized.
     """
-    
+
     init_logging()
 
     logger.log(SECTION, 'PRE-INITIALIZATION')
@@ -606,14 +588,14 @@ def init(contr):
         contr = morse.core.blenderapi.controller()
         close_all(contr)
         quit(contr)
-    
+
     # Set the default value of the logic tic rate to 60
     #bge.logic.setLogicTicRate(60.0)
     #bge.logic.setPhysicsTicRate(60.0)
 
 def init_logging():
     from morse.core.ansistrm import ColorizingStreamHandler
-    
+
     if "with-colors" in sys.argv:
         if "with-xmas-colors" in sys.argv:
             ch = ColorizingStreamHandler(scheme = "xmas")
@@ -621,17 +603,17 @@ def init_logging():
             ch = ColorizingStreamHandler(scheme = "dark")
         else:
             ch = ColorizingStreamHandler()
-        
+
     else:
         ch = ColorizingStreamHandler(scheme = "mono")
-    
+
     from morse.helpers.morse_logging import MorseFormatter
     # create logger
     logger = logging.getLogger('morse')
     logger.setLevel(logging.INFO)
 
     # create console handler and set level to debug
-    
+
     ch.setLevel(logging.DEBUG)
 
     # create formatter
@@ -648,7 +630,7 @@ def init_supervision_services():
     virtual 'simulation' component to it, loads any other request
     manager mapped to the 'simulation' component and register all
     simulation management services declared in
-    :py:mod:`morse.core.supervision_services` 
+    :py:mod:`morse.core.supervision_services`
     """
 
     from morse.services.supervision_services import Supervision
@@ -700,6 +682,12 @@ def simulation_main(contr):
 
     We do here all homeworks to manage the simulation at whole.
     """
+    # Call datastream manager action handler
+    # Call it early at the synchronisation management may be done here
+    if 'stream_managers' in persistantstorage:
+        for ob in persistantstorage.stream_managers.values():
+            ob.action()
+
     # Update the time variable
     try:
         persistantstorage.time.update()
@@ -720,7 +708,7 @@ def simulation_main(contr):
     if "morse_services" in persistantstorage:
         # let the service managers process their inputs/outputs
         persistantstorage.morse_services.process()
-    
+
     if MULTINODE_SUPPORT:
         # Register the locations of all the robots handled by this node
         persistantstorage.node_instance.synchronize()
@@ -733,8 +721,9 @@ def switch_camera(contr):
     # Activate only once for each key press
     if sensor.positive and sensor.triggered:
         scene = morse.core.blenderapi.scene()
+        cameras = [c for c in scene.cameras if not 'NOT_F9_ABLE' in c]
         index = persistantstorage.current_camera_index
-        next_camera = scene.cameras[index]
+        next_camera = cameras[index]
         scene.active_camera = next_camera
         logger.info("Showing view from camera: '%s'" % next_camera.name)
         # Disable mouse cursor for Human camera
@@ -743,7 +732,7 @@ def switch_camera(contr):
         else:
             morse.core.blenderapi.mousepointer(visible = True)
         # Update the index for the next call
-        index = (index + 1) % len(scene.cameras)
+        index = (index + 1) % len(cameras)
         persistantstorage.current_camera_index = index
 
 
@@ -761,7 +750,7 @@ def close_all(contr):
     # Force the deletion of the robot objects
     if 'robotDict' in persistantstorage:
         for robot_instance in persistantstorage.robotDict.values():
-           robot_instance.finalize() 
+           robot_instance.finalize()
 
     logger.log(ENDSECTION, 'CLOSING REQUEST MANAGERS...')
     del persistantstorage.morse_services
@@ -769,14 +758,10 @@ def close_all(contr):
 
     logger.log(ENDSECTION, 'CLOSING DATASTREAMS...')
     # Force the deletion of the datastream objects
-    if 'datastreamDict' in persistantstorage:
-        for obj, datastream_instance in persistantstorage.datastreamDict.items():
-            if datastream_instance:
-                import gc # Garbage Collector
-                logger.debug("At closing time, %s has %s references" %
-                        (datastream_instance,
-                         gc.get_referents(datastream_instance)))
-                del obj
+    if 'stream_managers' in persistantstorage:
+        for datastream_instance in persistantstorage.stream_managers.values():
+            datastream_instance.finalize()
+        del persistantstorage.stream_managers
 
     logger.log(ENDSECTION, 'CLOSING OVERLAYS...')
     del persistantstorage.overlayDict
